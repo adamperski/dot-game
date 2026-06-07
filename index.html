@@ -1,0 +1,1429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Dot Game"/>
+  <meta name="theme-color" content="#080814"/>
+  <title>🎳 Dot Game</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
+    html,body{background:#080814;color:#fff;font-family:'Calibri','Segoe UI',sans-serif;overscroll-behavior:none;min-height:100vh}
+    body{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+    input,button{-webkit-appearance:none;appearance:none;font-family:'Calibri','Segoe UI',sans-serif;outline:none;cursor:pointer}
+    ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#0d0d1e}::-webkit-scrollbar-thumb{background:#333;border-radius:2px}
+    .mono{font-family:'DM Mono',monospace}
+    .bhs{font-family:'Calibri','Segoe UI',sans-serif;font-weight:700;letter-spacing:2px;text-transform:uppercase}
+    #app{max-width:680px;margin:0 auto;min-height:100vh}
+    .tab-bar{display:flex;gap:3px;background:#0d0d1e;border-radius:11px;padding:3px}
+    .tab-btn{flex:1;padding:10px 4px;border:none;background:transparent;color:#555;font-family:'Calibri','Segoe UI',sans-serif;font-weight:700;font-size:9px;letter-spacing:2px;text-transform:uppercase;border-radius:9px;transition:all .2s;display:flex;flex-direction:column;align-items:center;gap:2px}
+    .tab-btn.active{background:#FF6B35;color:#fff}
+    .tab-btn span{font-size:17px}
+    .card{background:#0f0f22;border-radius:14px;border:1px solid rgba(255,255,255,0.04);padding:16px;margin-bottom:16px}
+    .sheet{background:#0f0f22;border-radius:14px;overflow:hidden;margin-bottom:12px}
+    .sheet-header{padding:10px 14px;display:flex;align-items:center;justify-content:space-between}
+    .frames-wrap{padding:0 8px 10px;overflow-x:auto}
+    .frames-row{display:flex;gap:3px;min-width:320px}
+    .frame-col{flex:1;display:flex;flex-direction:column;align-items:center;min-width:0}
+    .frame-col.f10{flex:1.6}
+    .frame-num{text-align:center;font-size:8px;color:#444;font-family:'DM Mono',monospace;margin-bottom:3px}
+    .outcome-btn{width:100%;padding:5px 2px;border:2px solid #1e1e3e;border-radius:8px;background:#080814;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;transition:all .12s;min-height:50px}
+    .outcome-btn:active{transform:scale(0.94)}
+    .outcome-btn.empty{border-style:dashed;border-color:#1a1a3e}
+    .outcome-btn.strike{border-color:rgba(255,230,109,0.5);background:rgba(255,230,109,0.08)}
+    .outcome-btn.spare{border-color:rgba(78,205,196,0.5);background:rgba(78,205,196,0.07)}
+    .outcome-btn.open{border-color:rgba(255,107,53,0.4);background:rgba(255,107,53,0.06)}
+    .outcome-btn.split-open{border-color:rgba(247,37,133,0.5);background:rgba(247,37,133,0.06)}
+    .outcome-btn.split-spare{border-color:rgba(6,214,160,0.5);background:rgba(6,214,160,0.07)}
+    .outcome-btn.miss5{border-color:rgba(199,125,255,0.5);background:rgba(199,125,255,0.07)}
+    .outcome-sym{font-size:15px;font-weight:900;line-height:1}
+    .outcome-sub{font-size:7px;opacity:0.6;font-weight:700;letter-spacing:0.5px;text-transform:uppercase}
+    /* 10th frame has 3 mini cells */
+    .f10-cells{display:flex;gap:2px;width:100%}
+    .f10-cell{flex:1;min-height:50px;border:2px solid #1e1e3e;border-radius:7px;background:#080814;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;transition:all .12s;padding:3px 1px}
+    .f10-cell:active{transform:scale(0.94)}
+    .f10-cell.empty{border-style:dashed;border-color:#1a1a3e}
+    .f10-cell.strike{border-color:rgba(255,230,109,0.5);background:rgba(255,230,109,0.08)}
+    .f10-cell.spare{border-color:rgba(78,205,196,0.5);background:rgba(78,205,196,0.07)}
+    .f10-cell.open{border-color:rgba(255,107,53,0.4);background:rgba(255,107,53,0.06)}
+    .f10-cell.split-open{border-color:rgba(247,37,133,0.5);background:rgba(247,37,133,0.06)}
+    .f10-cell.split-spare{border-color:rgba(6,214,160,0.5);background:rgba(6,214,160,0.07)}
+    .f10-cell.miss5{border-color:rgba(199,125,255,0.5);background:rgba(199,125,255,0.07)}
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:200;display:flex;align-items:flex-end;justify-content:center}
+    .modal-box{width:100%;max-width:680px;background:#12122a;border-radius:18px 18px 0 0;padding:22px 16px 40px}
+    .outcome-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+    .outcome-pick{border:2px solid #2a2a4e;border-radius:12px;background:#1a1a3e;padding:14px 10px;display:flex;flex-direction:column;align-items:center;gap:6px;transition:all .12s;text-align:center}
+    .outcome-pick:active{transform:scale(0.96)}
+    .dot-card{margin-bottom:12px;background:#0f0f22;border-radius:14px;overflow:hidden}
+    .dot-header{padding:12px 14px;display:flex;align-items:center;justify-content:space-between}
+    .dot-events{padding:0 14px 12px;display:flex;flex-direction:column;gap:4px}
+    .dot-event-row{display:flex;align-items:center;gap:8px;font-size:12px;color:#888}
+    .stat-bar-wrap{margin-bottom:6px}
+    .stat-bar-track{height:6px;background:#1a1a3e;border-radius:3px;overflow:hidden;margin-top:3px}
+    .stat-bar-fill{height:100%;border-radius:3px;transition:width .5s}
+    .week-row{margin-bottom:10px;border-radius:12px;overflow:hidden;border:1px solid #1a1a32}
+    .week-header{width:100%;padding:12px 14px;background:#080814;border:none;display:flex;justify-content:space-between;align-items:center;color:#fff}
+    .week-body{padding:12px 14px;border-top:1px solid #1a1a32}
+    .pay-row{margin-bottom:8px;padding:10px 12px;border-radius:10px}
+    .pay-btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+    .pay-btn{padding:5px 10px;border-radius:7px;font-size:11px;border:1px solid rgba(78,205,196,0.4);background:rgba(78,205,196,0.13);color:#4ECDC4;font-weight:700;white-space:nowrap}
+    .pay-inp{flex:1;min-width:60px;padding:5px 8px;border-radius:7px;background:#080814;border:1px solid #2a2a44;color:#fff;font-size:12px;outline:none}
+    .pay-log{padding:5px 10px;border-radius:7px;background:#FFE66D;border:none;color:#0a0a14;font-weight:700;font-size:11px}
+    .roster-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;margin-bottom:8px}
+    .presence-section{display:flex;flex-wrap:wrap;gap:8px}
+    .hall-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
+    .balance-row{padding:10px 12px;border-radius:10px;margin-bottom:6px}
+    .inp{padding:9px 12px;border-radius:8px;background:#080814;border:1px solid #1e1e3e;color:#fff;font-size:13px;outline:none}
+    .confirm-box{background:rgba(255,230,109,0.04);border:1px solid rgba(255,230,109,0.2);border-radius:14px;padding:16px;margin-bottom:14px}
+    .game-tabs{display:flex;gap:4px;background:#0f0f22;border-radius:8px;padding:4px}
+    .game-tab{padding:6px 10px;border-radius:6px;background:transparent;border:none;color:#555;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:1px}
+    .game-tab.active{background:#FF6B35;color:#fff}
+    .avatar{border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0}
+    .section-label{font-weight:700;font-size:10px;letter-spacing:3px;text-transform:uppercase;margin-bottom:4px}
+    .section-sub{font-size:11px;color:#444;margin-bottom:14px}
+    .empty-state{text-align:center;padding:60px 20px;color:#2a2a4a}
+    .empty-icon{font-size:52px;margin-bottom:8px}
+    .empty-text{font-weight:700;letter-spacing:3px;text-transform:uppercase}
+    .flex{display:flex}.flex-1{flex:1}.gap-6{gap:6px}.gap-8{gap:8px}.gap-10{gap:10px}.gap-12{gap:12px}
+    .items-center{align-items:center}.justify-between{justify-content:space-between}.wrap{flex-wrap:wrap}
+    .mb-4{margin-bottom:4px}.mb-6{margin-bottom:6px}.mb-8{margin-bottom:8px}.mb-10{margin-bottom:10px}
+    .mb-12{margin-bottom:12px}.mb-14{margin-bottom:14px}.mb-16{margin-bottom:16px}
+    .mt-4{margin-top:4px}.mt-8{margin-top:8px}.mt-12{margin-top:12px}.mt-14{margin-top:14px}
+    .text-right{text-align:right}
+  </style>
+</head>
+<body>
+<div id="app"></div>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+<script type="text/babel" data-type="module">
+const { useState, useEffect, useCallback } = React;
+
+const DOT_VALUE = 0.50;
+const STORAGE_KEY = "bowling_dot_v10";
+const MAIN_KEY = "main";
+
+const COLORS = [
+  {bg:"#FF6B35",text:"#fff"},
+  {bg:"#4ECDC4",text:"#111"},
+  {bg:"#FFE66D",text:"#111"},
+  {bg:"#C77DFF",text:"#fff"},
+  {bg:"#F72585",text:"#fff"},
+  {bg:"#06D6A0",text:"#111"},
+];
+
+const REGULARS = ["Rich Pennal","John Crowder","Robert McQuoid","Adam Perski","Trey Simpson"];
+
+// ─── Frame outcome types ──────────────────────────────────────────────────────
+// Frames 1-9: one outcome + optional flags
+// Frame 10: up to 3 throws — stored as throws[0..2], each a single outcome
+//   For frame 10: throws[0] is always first ball outcome
+//   If throws[0]=strike, throws[1] is second ball, throws[2] is third ball
+//   If throws[0]=spare/open/etc, only 2 balls (no bonus)
+
+// Single-throw outcomes (what happened on this "turn")
+const THROW_OUTCOMES = [
+  { id:"strike",     sym:"X",  color:"#FFE66D", desc:"Strike" },
+  { id:"spare",      sym:"/",  color:"#4ECDC4", desc:"Spare (no split)" },
+  { id:"open",       sym:"—",  color:"#FF6B35", desc:"Open (missed spare)" },
+  { id:"split-open", sym:"S",  color:"#F72585", desc:"Split — missed" },
+  { id:"split-spare",sym:"S/", color:"#06D6A0", desc:"Split — converted" },
+  { id:"miss5",      sym:"5",  color:"#C77DFF", desc:"Missed 5-pin" },
+];
+
+const SPLIT_SUBTYPES = [
+  { id:"small", label:"Small Split", icon:"👏", desc:"3-10, 2-7, etc." },
+  { id:"large", label:"Large Split",  icon:"🎉", desc:"Big gap splits" },
+  { id:"710",   label:"7-10 Split!", icon:"👑", desc:"The big one" },
+];
+
+const frameStyleMap = {
+  null:         { sym:"·",  cls:"empty",      symColor:"#2a2a4a" },
+  strike:       { sym:"X",  cls:"strike",     symColor:"#FFE66D" },
+  spare:        { sym:"/",  cls:"spare",      symColor:"#4ECDC4" },
+  open:         { sym:"—",  cls:"open",       symColor:"#FF6B35" },
+  "split-open": { sym:"S",  cls:"split-open", symColor:"#F72585" },
+  "split-spare":{ sym:"S/", cls:"split-spare",symColor:"#06D6A0" },
+  miss5:        { sym:"5",  cls:"miss5",      symColor:"#C77DFF" },
+};
+
+// Frame 1-9: { outcome, splitType }
+// Frame 10: { throws: [{outcome, splitType}, {outcome, splitType}, {outcome, splitType}] }
+const emptyFrame = () => ({outcome:null, splitType:null});
+const emptyFrame10 = () => ({throws:[{outcome:null,splitType:null},{outcome:null,splitType:null},{outcome:null,splitType:null}]});
+const emptyGame = () => [...Array(9)].map(emptyFrame).concat([emptyFrame10()]);
+
+const isOpen = o => o==="open"||o==="split-open"||o==="miss5";
+const isStrike = o => o==="strike";
+const isSpare = o => o==="spare"||o==="split-spare";
+
+// ─── State ────────────────────────────────────────────────────────────────────
+const initState = () => ({
+  players: REGULARS.map((n,i) => ({
+    id:i+1, name:n, average:null, colorIdx:i%COLORS.length,
+    isRegular:true, stats:{}, balance:{}, paid:{},
+  })),
+  weekHistory: [],
+  session: null,
+});
+
+const load = () => { try { const r=localStorage.getItem(STORAGE_KEY); return r?JSON.parse(r):null; } catch { return null; } };
+const save = s => { try { localStorage.setItem(STORAGE_KEY,JSON.stringify(s)); } catch {} };
+
+const owedFor = (dots,discount) => Math.max(0, Math.max(0,dots)*DOT_VALUE - (discount||0));
+const allPotKeys = wh => { const k=new Set(); wh.forEach(w=>w.groups.forEach(g=>k.add(g.potKey))); return [...k]; };
+const potTotal = (wh,key) => wh.reduce((s,w)=>{ const g=w.groups.find(g=>g.potKey===key); return s+(g?g.totalPaid||0:0); },0);
+
+// ─── Dot Analysis ─────────────────────────────────────────────────────────────
+function analyzeDots(players, session) {
+  const absentSet = new Set(session.absentIds||[]);
+  const res = {};
+  players.forEach(p => { res[p.id]={dots:0,dollarDiscount:0,events:[]}; });
+
+  const dot = (pid,n,label,icon) => { res[pid].dots+=n; res[pid].events.push({label,icon,dots:n}); };
+  const disc = (pid,n,label,icon) => { res[pid].dollarDiscount+=n; res[pid].events.push({label,icon,dollars:n}); };
+  const dotOthers = (pid,gids,n,label,icon) => {
+    gids.filter(id=>id!==pid).forEach(id=>{ if(res[id]){res[id].dots+=n;res[id].events.push({label:label+" (from teammate)",icon,dots:n});}});
+  };
+
+  const presentIds = players.filter(p=>!absentSet.has(p.id)).map(p=>p.id);
+  const absentIds  = players.filter(p=> absentSet.has(p.id)).map(p=>p.id);
+
+  // Manual dots
+  (session.manualDots||[]).forEach(md=>{ if(res[md.pid]) dot(md.pid,md.dots,md.label,md.icon); });
+
+  // Build per-game, per-frame strike matrix for hung & team-streak logic
+  // playerGames: { [pid]: [ game0frames, game1frames, ... ] }
+  const pg = session.playerGames||{};
+  const gameCount = Math.max(...players.map(p=>(pg[p.id]||[]).length), 1);
+  for (let gi=0; gi<gameCount; gi++) {
+    // ── Per-game analysis ──────────────────────────────────────────────────
+    // Build a flat sequence of (playerIdx, frameIdx, outcome) for team-streak tracking
+    // Team streak = consecutive strikes across all bowlers in order of bowling
+    // Order: bowler 1 frame 1, bowler 2 frame 1, ... bowler N frame 1, bowler 1 frame 2, ...
+
+    const gameFrames = {}; // pid -> frames array (10)
+    players.forEach(p => {
+      const games = pg[p.id]||[];
+      gameFrames[p.id] = games[gi]||emptyGame();
+    });
+
+    // ── First team open tracking (per game, per group) ─────────────────────
+    // Find the first frame index where any player in each group opened,
+    // then award the dot to every player in that group who also opened that frame.
+    const findFirstOpenFrame = (groupIds) => {
+      for (let fi = 0; fi < 10; fi++) {
+        const anyOpen = groupIds.some(pid => {
+          const o = frameOutcome(pid, fi);
+          return o !== null && isOpen(o);
+        });
+        if (anyOpen) return fi;
+      }
+      return -1;
+    };
+    const firstOpenFrameMain = findFirstOpenFrame(presentIds);
+    const firstOpenFrameSide = findFirstOpenFrame(absentIds);
+    // Award first-team-open dots to all openers in that frame
+    [[presentIds, firstOpenFrameMain], [absentIds, firstOpenFrameSide]].forEach(([groupIds, fi]) => {
+      if (fi < 0) return;
+      groupIds.forEach(pid => {
+        const o = frameOutcome(pid, fi);
+        if (o !== null && isOpen(o)) {
+          dot(pid, 1, "First team open (frame "+(fi+1)+")", "🚩");
+        }
+      });
+    });
+
+    // ── Hung logic ─────────────────────────────────────────────────────────
+    // A player is "hung" in frame fi if:
+    //   - They did NOT strike in frame fi
+    //   - Every other present bowler in their group DID strike in frame fi
+    // Consecutive hung frames get escalating dots
+
+    const groupOf = pid => absentSet.has(pid) ? absentIds : presentIds;
+
+    // For frame fi, get outcome of player p (handle 10th frame specially)
+    const frameOutcome = (pid, fi) => {
+      const frames = gameFrames[pid];
+      if (!frames) return null;
+      if (fi < 9) return frames[fi] ? frames[fi].outcome : null;
+      // 10th frame: use first throw for hung/team-streak logic
+      const f10 = frames[9];
+      if (!f10 || !f10.throws) return null;
+      return f10.throws[0] ? f10.throws[0].outcome : null;
+    };
+
+    // ── Team streak tracking (sequential, across frames) ───────────────────
+    // Bowling order: frame 1 bowler 1, frame 1 bowler 2, ...frame 1 bowler N,
+    //                frame 2 bowler 1, ...
+    // We track a running streak count and who last struck
+    // When someone doesn't strike, if streak >= 5, they get the dot
+
+    // Build ordered sequence for each group separately
+    [presentIds, absentIds].forEach(groupIds => {
+      if (groupIds.length === 0) return;
+      let teamStreakCount = 0;
+      let inStreak = false;
+
+      // Walk frame by frame, bowler by bowler (in group order)
+      for (let fi = 0; fi < 10; fi++) {
+        for (let bi = 0; bi < groupIds.length; bi++) {
+          const pid = groupIds[bi];
+          const o = frameOutcome(pid, fi);
+          if (o === null) continue; // not entered yet
+
+          if (isStrike(o)) {
+            teamStreakCount++;
+            if (teamStreakCount >= 5) inStreak = true;
+          } else {
+            // Non-strike: if we were in a streak of 5+, this person broke it
+            if (inStreak) {
+              dot(pid, 1, "Broke team strike streak ("+teamStreakCount+")", "💥");
+            }
+            teamStreakCount = 0;
+            inStreak = false;
+          }
+        }
+      }
+    });
+
+    // ── Per-player per-frame analysis ──────────────────────────────────────
+    players.forEach(p => {
+      const grp = groupOf(p.id);
+      const frames = gameFrames[p.id];
+      if (!frames) return;
+
+      let hangStreak = 0;
+      let strikeStreak = 0; // for turkey/4+ personal streak
+
+      for (let fi = 0; fi < 10; fi++) {
+        const is10 = fi===9;
+        let o, splitType, throwsList;
+
+        if (is10) {
+          const f10 = frames[9];
+          if (!f10 || !f10.throws) continue;
+          throwsList = f10.throws;
+          o = throwsList[0] ? throwsList[0].outcome : null;
+          splitType = throwsList[0] ? throwsList[0].splitType : null;
+        } else {
+          const f = frames[fi];
+          if (!f) continue;
+          o = f.outcome;
+          splitType = f.splitType;
+        }
+
+        if (o === null) { hangStreak=0; strikeStreak=0; continue; }
+
+        // ── Personal strike streak (turkey / 4+) ──────────────────────────
+        if (isStrike(o)) {
+          strikeStreak++;
+          if (strikeStreak===3) {
+            dotOthers(p.id,grp,1,"Turkey by "+p.name,"🦃");
+            res[p.id].events.push({label:"Turkey! (others +1)",icon:"🦃",dots:0});
+          } else if (strikeStreak>=4) {
+            dotOthers(p.id,grp,2,strikeStreak+"-strike streak","🔥");
+            res[p.id].events.push({label:strikeStreak+"-strike streak (others +2)",icon:"🔥",dots:0});
+          }
+        } else {
+          strikeStreak=0;
+        }
+
+        // ── Hung logic ────────────────────────────────────────────────────
+        // Hung = only this player didn't strike, everyone else in group did
+        // Spares do NOT trigger hung
+        if (!isStrike(o)) {
+          const groupStruck = grp.filter(id=>id!==p.id).every(id=>isStrike(frameOutcome(id, fi)));
+          if (groupStruck && grp.length > 1) {
+            // This player is hung this frame
+            hangStreak++;
+            if (hangStreak===1)      dot(p.id,2,"Hung (1 frame)","🪝");
+            else if (hangStreak===2) dot(p.id,3,"Hung 2 in a row","🪝🪝");
+            else                     dot(p.id,4,"Hung "+hangStreak+" in a row","🪝🪝🪝");
+          } else {
+            hangStreak=0;
+          }
+        } else {
+          hangStreak=0;
+        }
+
+        // ── Open frame dots ───────────────────────────────────────────────
+        if (isOpen(o)) {
+          dot(p.id,2,"Open frame","😬");
+
+          // Open 10th
+          if (is10) dot(p.id,2,"Opened 10th frame","💀");
+
+          // Miss 5-pin
+          if (o==="miss5") dot(p.id,2,"Missed 5-pin","🎯");
+        }
+
+        // ── Split logic ───────────────────────────────────────────────────
+        if (o==="split-open") dot(p.id,1,"Left a split","🎳");
+
+        const processSplitSpare = (st) => {
+          if (st==="710") {
+            res[p.id].dots=0; res[p.id].dollarDiscount=0;
+            res[p.id].events.push({label:"7-10 CONVERSION! All dots WIPED!",icon:"👑",dots:0,wipe:true});
+          } else if (st==="large") {
+            dotOthers(p.id,grp,2,p.name+" converted large split","🎉");
+            res[p.id].events.push({label:"Large split made! (others +2)",icon:"🎉",dots:0});
+          } else {
+            dotOthers(p.id,grp,1,p.name+" converted small split","👏");
+            res[p.id].events.push({label:"Small split made! (others +1)",icon:"👏",dots:0});
+          }
+        };
+        if (o==="split-spare") processSplitSpare(splitType);
+
+        // ── 10th frame bonus throws ───────────────────────────────────────
+        if (is10 && throwsList) {
+          // Process 2nd and 3rd throws of 10th
+          for (let t=1; t<3; t++) {
+            const th = throwsList[t];
+            if (!th || !th.outcome) continue;
+            const to = th.outcome;
+            // Open on 2nd throw of 10th (only if 1st wasn't a strike — spare attempt)
+            if (t===1 && isOpen(to) && !isStrike(o)) {
+              dot(p.id,2,"Open 10th frame (bonus)","💀");
+              if (to==="miss5") dot(p.id,2,"Missed 5-pin (10th)","🎯");
+            }
+            if (to==="split-spare") processSplitSpare(th.splitType);
+            if (to==="split-open") dot(p.id,1,"Left a split (10th)","🎳");
+          }
+        }
+      }
+
+      // ── Score-based checks (end of game) ─────────────────────────────────
+      const scoreInput = ((session.gameScores||{})[p.id]||{})[gi];
+      if (scoreInput && p.average) {
+        const score = parseInt(scoreInput);
+        if (!isNaN(score)) {
+          if (score < p.average) dot(p.id,1,"Missed average ("+score+" vs avg "+p.average+")","📉");
+          if (p.average - score >= 100) dot(p.id,20,"100+ under average!","🤦");
+          if (score - p.average >= 100) disc(p.id,10,"100+ over average — $10 off!","🌟");
+        }
+      }
+    });
+  }
+
+  return res;
+}
+
+// ─── Frame Picker ─────────────────────────────────────────────────────────────
+function FramePicker({frameIdx, throwNum, color, existingOutcome, onPick, onClose}) {
+  const [step, setStep] = useState("outcome");
+  const is10 = frameIdx===9;
+
+  const pick = (oid) => {
+    if (oid==="split-spare") { setStep("splitType_"+oid); }
+    else { onPick({outcome:oid, splitType:null}); }
+  };
+  const pickSplit = (oid, st) => { onPick({outcome:oid, splitType:st}); };
+
+  const outcomes = THROW_OUTCOMES;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={e=>e.stopPropagation()} style={{boxShadow:`0 -4px 40px ${color.bg}30`}}>
+        {step==="outcome" && <>
+          <div className="bhs mb-14" style={{fontSize:13,color:color.bg}}>
+            {is10 ? "10TH FRAME — THROW "+(throwNum+1) : "FRAME "+(frameIdx+1)}
+          </div>
+          <div className="outcome-grid">
+            {outcomes.map(o=>(
+              <button key={o.id} className="outcome-pick" onClick={()=>pick(o.id)}
+                style={{borderColor:o.color+"60",background:o.color+"0d"}}>
+                <span style={{fontSize:26,fontWeight:900,color:o.color,lineHeight:1}}>{o.sym}</span>
+                <span style={{fontSize:12,fontWeight:700,color:o.color}}>{o.desc}</span>
+              </button>
+            ))}
+          </div>
+          {existingOutcome && (
+            <button onClick={()=>onPick({outcome:null,splitType:null})} style={{width:"100%",padding:"10px",borderRadius:10,background:"transparent",border:"1px solid #2a2a4e",color:"#555",fontWeight:700,fontSize:12,letterSpacing:1,textTransform:"uppercase"}}>
+              Clear
+            </button>
+          )}
+        </>}
+
+        {step.startsWith("splitType_") && <>
+          <div className="bhs mb-14" style={{fontSize:13,color:color.bg}}>WHAT KIND OF SPLIT?</div>
+          <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:16}}>
+            {SPLIT_SUBTYPES.map(st=>(
+              <button key={st.id} className="outcome-pick" onClick={()=>pickSplit("split-spare",st.id)}
+                style={{flexDirection:"row",gap:12,justifyContent:"flex-start",borderColor:color.bg+"50",background:color.bg+"0d"}}>
+                <span style={{fontSize:26}}>{st.icon}</span>
+                <div style={{textAlign:"left"}}>
+                  <div style={{fontWeight:700,color:color.bg,fontSize:13}}>{st.label}</div>
+                  <div style={{fontSize:10,color:"#666"}}>{st.desc}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+          <button onClick={()=>setStep("outcome")} style={{width:"100%",padding:"10px",borderRadius:10,background:"transparent",border:"1px solid #2a2a4e",color:"#555",fontWeight:700,fontSize:12,letterSpacing:1,textTransform:"uppercase"}}>
+            ← Back
+          </button>
+        </>}
+      </div>
+    </div>
+  );
+}
+
+// ─── Score Sheet ──────────────────────────────────────────────────────────────
+function ScoreSheet({player, frames, gameScore, onUpdate, onScoreChange}) {
+  const [modal, setModal] = useState(null); // {fi, throwNum}
+  const color = COLORS[player.colorIdx];
+
+  const handlePick = (fi, throwNum, picked) => {
+    const nf = frames.map((f,i) => {
+      if (i !== fi) return f;
+      if (fi < 9) return {...f,...picked};
+      // 10th frame
+      const newThrows = [...(f.throws||[{outcome:null,splitType:null},{outcome:null,splitType:null},{outcome:null,splitType:null}])];
+      newThrows[throwNum] = picked;
+      return {...f, throws:newThrows};
+    });
+    onUpdate(nf);
+    setModal(null);
+  };
+
+  // Summary counts
+  const counts = {X:0,spare:0,open:0,split:0};
+  frames.forEach((f,fi) => {
+    if (fi < 9) {
+      if (isStrike(f.outcome)) counts.X++;
+      else if (isSpare(f.outcome)) counts.spare++;
+      else if (isOpen(f.outcome)) { counts.open++; if(f.outcome==="split-open") counts.split++; }
+    } else {
+      (f.throws||[]).forEach(t=>{ if(t&&isStrike(t.outcome)) counts.X++; });
+    }
+  });
+
+  const getFsm = (o) => frameStyleMap[o] || frameStyleMap[null];
+
+  // 10th frame: determine which throws are available
+  const f10 = frames[9] || emptyFrame10();
+  const t0 = (f10.throws||[])[0] || {outcome:null};
+  const t1 = (f10.throws||[])[1] || {outcome:null};
+  const t2 = (f10.throws||[])[2] || {outcome:null};
+  // 3rd throw only if 1st was strike or 1st+2nd = spare
+  const has3rd = isStrike(t0.outcome) || isSpare(t1.outcome) || (isStrike(t0.outcome) && isStrike(t1.outcome));
+
+  return (
+    <div className="sheet" style={{border:`1.5px solid ${color.bg}28`}}>
+      <div className="sheet-header" style={{background:`linear-gradient(135deg,${color.bg}14,transparent)`,borderBottom:`1px solid ${color.bg}1a`}}>
+        <div className="flex items-center gap-10">
+          <div className="avatar" style={{width:32,height:32,background:color.bg,color:color.text,fontSize:15,boxShadow:`0 0 10px ${color.bg}50`}}>
+            {player.name.charAt(0)}
+          </div>
+          <div>
+            <div style={{fontSize:14,fontWeight:700}}>{player.name}</div>
+            <div className="mono" style={{fontSize:10,color:"#444"}}>
+              {counts.X>0?counts.X+"X ":""}{counts.spare>0?counts.spare+"/ ":""}{counts.open>0?counts.open+"— ":""}
+              {player.average?" avg "+player.average:""}
+            </div>
+          </div>
+        </div>
+        {/* Score input */}
+        <div className="flex items-center gap-8">
+          <input type="number" placeholder="Score" value={gameScore||""} onChange={e=>onScoreChange(e.target.value)}
+            style={{width:70,padding:"5px 8px",borderRadius:8,background:"#080814",border:`1px solid ${color.bg}40`,color:"#FFE66D",fontSize:14,fontWeight:700,textAlign:"center",outline:"none"}}/>
+        </div>
+      </div>
+
+      <div className="frames-wrap">
+        <div className="frames-row">
+          {frames.slice(0,9).map((f,fi) => {
+            const fsm = getFsm(f.outcome);
+            return (
+              <div key={fi} className="frame-col">
+                <div className="frame-num">{fi+1}</div>
+                <button className={"outcome-btn "+fsm.cls} onClick={()=>setModal({fi,throwNum:0})}>
+                  <span className="outcome-sym" style={{color:fsm.symColor}}>{fsm.sym}</span>
+                  {f.outcome==="split-spare"&&f.splitType==="710"&&<span style={{fontSize:7}}>👑</span>}
+                  {f.outcome==="split-spare"&&f.splitType==="large"&&<span style={{fontSize:7}}>🎉</span>}
+                  {f.outcome==="split-spare"&&f.splitType==="small"&&<span style={{fontSize:7}}>👏</span>}
+                </button>
+              </div>
+            );
+          })}
+
+          {/* 10th frame — up to 3 cells */}
+          <div className="frame-col f10">
+            <div className="frame-num">10</div>
+            <div className="f10-cells">
+              {[t0,t1,t2].map((th,ti) => {
+                // Only show 2nd if 1st is filled; only show 3rd if eligible
+                if (ti===1 && !t0.outcome) return null;
+                if (ti===2 && (!t1.outcome || !has3rd)) return null;
+                const fsm = getFsm(th.outcome);
+                return (
+                  <button key={ti} className={"f10-cell "+fsm.cls} onClick={()=>setModal({fi:9,throwNum:ti})}>
+                    <span className="outcome-sym" style={{color:fsm.symColor,fontSize:13}}>{fsm.sym}</span>
+                    {th.outcome==="split-spare"&&th.splitType==="710"&&<span style={{fontSize:7}}>👑</span>}
+                    {th.outcome==="split-spare"&&th.splitType==="large"&&<span style={{fontSize:7}}>🎉</span>}
+                    {th.outcome==="split-spare"&&th.splitType==="small"&&<span style={{fontSize:7}}>👏</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {modal && (
+        <FramePicker
+          frameIdx={modal.fi} throwNum={modal.throwNum}
+          color={color}
+          existingOutcome={modal.fi<9 ? frames[modal.fi].outcome : ((frames[9]||{}).throws||[])[modal.throwNum]}
+          onPick={picked=>handlePick(modal.fi, modal.throwNum, picked)}
+          onClose={()=>setModal(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Stat Bar ─────────────────────────────────────────────────────────────────
+function StatBar({label,value,max,color}) {
+  const pct = max>0?(value/max)*100:0;
+  return (
+    <div className="stat-bar-wrap">
+      <div className="flex justify-between" style={{fontSize:12}}>
+        <span style={{color:"#aaa"}}>{label}</span>
+        <span className="mono" style={{color:"#fff",fontWeight:700}}>{value}</span>
+      </div>
+      <div className="stat-bar-track"><div className="stat-bar-fill" style={{width:pct+"%",background:color}}/></div>
+    </div>
+  );
+}
+
+// ─── Pay Row ──────────────────────────────────────────────────────────────────
+function PayRow({c,players,onPay}) {
+  const [inp,setInp]=useState("");
+  const remaining=Math.max(0,(c.amountOwed||0)-(c.amountPaid||0));
+  const settled=remaining<0.005;
+  const p=players.find(pl=>pl.id===c.playerId);
+  const col=p?COLORS[p.colorIdx]:{bg:"#555"};
+  return (
+    <div className="pay-row" style={{background:settled?"rgba(6,214,160,0.03)":"rgba(255,107,53,0.03)",border:`1px solid ${settled?"rgba(6,214,160,0.12)":"rgba(255,107,53,0.12)"}`}}>
+      <div className="flex justify-between items-center" style={{marginBottom:settled?0:8}}>
+        <div className="flex items-center gap-8 wrap">
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <div style={{width:8,height:8,borderRadius:"50%",background:col.bg,flexShrink:0}}/>
+            <span style={{fontSize:13,fontWeight:700}}>{c.name}</span>
+          </div>
+          <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+            {c.dotsOwed>0&&<span style={{fontSize:10,padding:"1px 6px",borderRadius:8,color:"#FFE66D",background:"rgba(255,230,109,0.1)"}}>{c.dots} dots = ${c.dotsOwed.toFixed(2)}</span>}
+            {(c.carryIn||0)>0.005&&<span style={{fontSize:10,padding:"1px 6px",borderRadius:8,color:"#FF6B35",background:"rgba(255,107,53,0.1)"}}>+${c.carryIn.toFixed(2)} carry</span>}
+            {(c.carryIn||0)<-0.005&&<span style={{fontSize:10,padding:"1px 6px",borderRadius:8,color:"#4ECDC4",background:"rgba(78,205,196,0.1)"}}>−${Math.abs(c.carryIn).toFixed(2)} credit</span>}
+          </div>
+        </div>
+        <div className="text-right" style={{flexShrink:0,marginLeft:8}}>
+          <div style={{fontSize:14,fontWeight:700,color:settled?"#06D6A0":"#FFE66D"}}>{settled?"✓ PAID":"$"+remaining.toFixed(2)+" left"}</div>
+          <div style={{fontSize:10,color:"#444"}}>${(c.amountPaid||0).toFixed(2)} of ${(c.amountOwed||0).toFixed(2)} paid</div>
+        </div>
+      </div>
+      {!settled&&(
+        <div className="pay-btns">
+          {[...new Set([remaining.toFixed(2),(c.amountOwed||0).toFixed(2)])].filter(a=>parseFloat(a)>0.005).map(a=>(
+            <button key={a} className="pay-btn" onClick={()=>onPay(parseFloat(a))}>Pay ${a}</button>
+          ))}
+          <input className="pay-inp" type="number" min="0" step="0.50" placeholder="Other $" value={inp} onChange={e=>setInp(e.target.value)}/>
+          <button className="pay-log" onClick={()=>{onPay(parseFloat(inp));setInp("");}}>LOG</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Excel Export ─────────────────────────────────────────────────────────────
+function exportToExcel(players, weekHistory) {
+  const wb = XLSX.utils.book_new();
+
+  // ── Sheet 1: Season Summary ────────────────────────────────────────────────
+  const summaryData = [
+    ["DOT GAME — SEASON SUMMARY"],
+    [],
+    ["Player","Avg","Weeks Played","Total Dots","Total Paid","Main Pot Paid","Side Pot Paid","Balance"],
+    ...players.map(p=>{
+      const totalPaid = Object.values(p.paid||{}).reduce((t,v)=>t+v,0);
+      const mainPaid = (p.paid||{})[MAIN_KEY]||0;
+      const sidePaid = totalPaid - mainPaid;
+      const balance = Object.values(p.balance||{}).reduce((t,v)=>t+v,0);
+      const weeksPlayed = weekHistory.filter(wk=>wk.groups.some(g=>g.contributions.some(c=>c.playerId===p.id))).length;
+      const totalDots = weekHistory.reduce((t,wk)=>{
+        const c = wk.groups.flatMap(g=>g.contributions).find(c=>c.playerId===p.id);
+        return t + (c?c.dots:0);
+      },0);
+      return [p.name, p.average||"", weeksPlayed, totalDots, totalPaid.toFixed(2), mainPaid.toFixed(2), sidePaid.toFixed(2), balance.toFixed(2)];
+    }),
+    [],
+    ["","","","","Total Pot:", weekHistory.reduce((t,wk)=>t+wk.groups.reduce((s,g)=>s+(g.totalPaid||0),0),0).toFixed(2)],
+    ["","","","","Split per player:", players.length>0?(weekHistory.reduce((t,wk)=>t+wk.groups.reduce((s,g)=>s+(g.totalPaid||0),0),0)/players.length).toFixed(2):""],
+  ];
+  const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
+  ws1["!cols"] = [{wch:20},{wch:8},{wch:14},{wch:12},{wch:12},{wch:14},{wch:14},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, ws1, "Season Summary");
+
+  // ── Sheet 2: Week by Week ──────────────────────────────────────────────────
+  const weekRows = [["Week","Date","Player","Pot","Dots","Owed","Paid","Remaining"]];
+  weekHistory.forEach(wk=>{
+    wk.groups.forEach(g=>{
+      g.contributions.forEach(c=>{
+        const remaining = Math.max(0,(c.amountOwed||0)-(c.amountPaid||0));
+        weekRows.push([wk.weekNum, wk.date, c.name, g.label, c.dots, c.amountOwed.toFixed(2), (c.amountPaid||0).toFixed(2), remaining.toFixed(2)]);
+      });
+    });
+  });
+  const ws2 = XLSX.utils.aoa_to_sheet(weekRows);
+  ws2["!cols"] = [{wch:6},{wch:12},{wch:18},{wch:22},{wch:8},{wch:8},{wch:8},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, ws2, "Week by Week");
+
+  // ── Sheet 3: Event Stats ───────────────────────────────────────────────────
+  const statMap = {};
+  players.forEach(p=>{statMap[p.id]={name:p.name,opens:0,splits:0,smallPicks:0,largePicks:0,sevenTen:0,turkeys:0,streaks:0,hung:0,miss5:0,gutters:0,wrongLane:0,outOfTurn:0};});
+  weekHistory.forEach(wk=>{
+    if(!wk.dotResults)return;
+    Object.entries(wk.dotResults).forEach(([pid,dr])=>{
+      const a=statMap[parseInt(pid)];if(!a)return;
+      (dr.events||[]).forEach(ev=>{
+        if(ev.icon==="😬"&&!ev.label.includes("from"))a.opens++;
+        if(ev.icon==="🎳"&&!ev.label.includes("from"))a.splits++;
+        if(ev.icon==="👏"&&!ev.label.includes("from"))a.smallPicks++;
+        if(ev.icon==="🎉"&&!ev.label.includes("from"))a.largePicks++;
+        if(ev.icon==="👑"&&!ev.label.includes("from"))a.sevenTen++;
+        if(ev.icon==="🦃"&&!ev.label.includes("from"))a.turkeys++;
+        if(ev.icon==="🔥"&&!ev.label.includes("from"))a.streaks++;
+        if(ev.icon==="🪝"&&!ev.label.includes("from"))a.hung++;
+        if(ev.icon==="🎯"&&!ev.label.includes("from"))a.miss5++;
+        if(ev.icon==="💥")a.gutters++;
+        if(ev.icon==="🔀")a.wrongLane++;
+        if(ev.icon==="⏭️")a.outOfTurn++;
+      });
+    });
+  });
+  const statRows = [
+    ["Player","Opens","Splits Left","Turkeys","4+ Streaks","Hung","7-10 Picks","Small Splits Made","Large Splits Made","Missed 5-Pin","Wrong Lane","Out of Turn"],
+    ...Object.values(statMap).map(s=>[s.name,s.opens,s.splits,s.turkeys,s.streaks,s.hung,s.sevenTen,s.smallPicks,s.largePicks,s.miss5,s.wrongLane,s.outOfTurn])
+  ];
+  const ws3 = XLSX.utils.aoa_to_sheet(statRows);
+  ws3["!cols"] = [{wch:18},...Array(11).fill({wch:12})];
+  XLSX.utils.book_append_sheet(wb, ws3, "Event Stats");
+
+  // ── Sheet 4: Scores ────────────────────────────────────────────────────────
+  // Build per-week per-game scores if available
+  const scoreRows = [["Week","Date","Player","Game 1","Game 2","Game 3","Series"]];
+  weekHistory.forEach(wk=>{
+    if (!wk.gameScores) return;
+    players.forEach(p=>{
+      const gs = wk.gameScores[p.id]||[];
+      const g1=parseInt(gs[0])||"",g2=parseInt(gs[1])||"",g3=parseInt(gs[2])||"";
+      const series=[g1,g2,g3].filter(g=>g!=="").reduce((t,g)=>t+g,0);
+      if(g1!==""||g2!==""||g3!=="") scoreRows.push([wk.weekNum,wk.date,p.name,g1,g2,g3,series||""]);
+    });
+  });
+  const ws4 = XLSX.utils.aoa_to_sheet(scoreRows);
+  ws4["!cols"] = [{wch:6},{wch:12},{wch:18},{wch:9},{wch:9},{wch:9},{wch:9}];
+  XLSX.utils.book_append_sheet(wb, ws4, "Scores");
+
+  XLSX.writeFile(wb, "DotGame_Season.xlsx");
+}
+
+// ─── Main App ─────────────────────────────────────────────────────────────────
+function App() {
+  const [state,setState]=useState(()=>load()||initState());
+  const [tab,setTab]=useState("game");
+  const [subName,setSubName]=useState("");
+  const [subAvg,setSubAvg]=useState("");
+  const [editAvg,setEditAvg]=useState({});
+  const [editName,setEditName]=useState({});
+  const [newRegName,setNewRegName]=useState("");
+  const [newRegAvg,setNewRegAvg]=useState("");
+  const [absentDraft,setAbsentDraft]=useState(new Set());
+  const [expandedWeek,setExpandedWeek]=useState(null);
+  const [showClose,setShowClose]=useState(false);
+  const [activeGame,setActiveGame]=useState(0);
+  const [statPlayer,setStatPlayer]=useState(null);
+
+  const {players,weekHistory,session}=state;
+  useEffect(()=>save(state),[state]);
+  const upd=useCallback(fn=>setState(s=>({...s,...fn(s)})),[]);
+
+  const allKeys=allPotKeys(weekHistory);
+  const mainTotal=potTotal(weekHistory,MAIN_KEY);
+  const sideTotals=allKeys.filter(k=>k!==MAIN_KEY).map(k=>({key:k,total:potTotal(weekHistory,k)}));
+  const seasonNum=session?session.weekNum:(weekHistory.length>0?weekHistory[weekHistory.length-1].weekNum+1:1);
+  const absentSet=new Set((session||{}).absentIds||[]);
+  const presentPlayers=players.filter(p=>!absentSet.has(p.id));
+  const absentPlayers =players.filter(p=> absentSet.has(p.id));
+  const gameCount=session&&players.length>0?((session.playerGames[players[0].id]||[emptyGame()]).length):1;
+
+  // ── Roster ────────────────────────────────────────────────────────────────
+  const updateAvg=(id,val)=>{ const avg=val===""?null:parseInt(val); upd(s=>({players:s.players.map(p=>p.id===id?{...p,average:isNaN(avg)?null:avg}:p)})); setEditAvg(prev=>{const n={...prev};delete n[id];return n;}); };
+  const saveEditName=(id)=>{ const name=(editName[id]||"").trim(); if(name)upd(s=>({players:s.players.map(p=>p.id===id?{...p,name}:p)})); setEditName(prev=>{const n={...prev};delete n[id];return n;}); };
+  const addSub=()=>{ if(!subName.trim())return; const idx=players.length; upd(s=>({players:[...s.players,{id:Date.now(),name:subName.trim(),average:subAvg?parseInt(subAvg):null,colorIdx:idx%COLORS.length,isRegular:false,stats:{},balance:{},paid:{}}]})); setSubName("");setSubAvg(""); };
+  const addRegular=()=>{ if(!newRegName.trim())return; const idx=players.length; upd(s=>({players:[...s.players,{id:Date.now(),name:newRegName.trim(),average:newRegAvg?parseInt(newRegAvg):null,colorIdx:idx%COLORS.length,isRegular:true,stats:{},balance:{},paid:{}}]})); setNewRegName("");setNewRegAvg(""); };
+  const removePlayer=(id,isSub)=>{ if(!window.confirm("Remove "+(isSub?"sub":"player")+" from lineup? History stays."))return; upd(s=>({players:s.players.filter(p=>p.id!==id)})); };
+
+  // ── Session ───────────────────────────────────────────────────────────────
+  const startSession=()=>{
+    if(!players.length)return;
+    upd(s=>{
+      const wkNum=s.weekHistory.length>0?s.weekHistory[s.weekHistory.length-1].weekNum+1:1;
+      const pg={};
+      s.players.forEach(p=>{ pg[p.id]=[emptyGame()]; });
+      return {session:{weekNum:wkNum,gameNum:1,absentIds:[...absentDraft],playerGames:pg,gameScores:{},manualDots:[]}};
+    });
+    setAbsentDraft(new Set());
+    setActiveGame(0);
+    setTab("game");
+  };
+
+  const nextGame=()=>{
+    upd(s=>{
+      if(!s.session)return s;
+      const pg={...s.session.playerGames};
+      s.players.forEach(p=>{ pg[p.id]=[...(pg[p.id]||[emptyGame()]),emptyGame()]; });
+      return{session:{...s.session,gameNum:s.session.gameNum+1,playerGames:pg}};
+    });
+    setActiveGame(g=>g+1);
+  };
+
+  const updateFrames=useCallback((pid,gi,nf)=>{
+    upd(s=>{ if(!s.session)return s; const pg={...s.session.playerGames}; const games=[...(pg[pid]||[])]; games[gi]=nf; pg[pid]=games; return{session:{...s.session,playerGames:pg}}; });
+  },[upd]);
+
+  const updateScore=useCallback((pid,gi,val)=>{
+    upd(s=>{ if(!s.session)return s; const gs={...(s.session.gameScores||{})}; if(!gs[pid])gs[pid]={}; gs[pid][gi]=val; return{session:{...s.session,gameScores:gs}}; });
+  },[upd]);
+
+  const addManual=(pid,dots,label,icon)=>{ upd(s=>({session:{...s.session,manualDots:[...(s.session.manualDots||[]),{pid,dots,label,icon}]}})); };
+
+  // Compute series total per player for current session
+  const seriesTotal=(pid)=>{
+    if(!session)return null;
+    const gs=session.gameScores||{};
+    const scores=Object.values(gs[pid]||{}).map(v=>parseInt(v)).filter(v=>!isNaN(v));
+    return scores.length>0?scores.reduce((t,v)=>t+v,0):null;
+  };
+
+  // ── Close Week ────────────────────────────────────────────────────────────
+  const closeWeek=()=>{
+    upd(s=>{
+      if(!s.session)return s;
+      const abs=new Set(s.session.absentIds);
+      const dr=analyzeDots(s.players,s.session);
+      const pBal=(p,key)=>((p.balance||{})[key]||0);
+      const mkGroup=(pList,potKey)=>{
+        const contribs=pList.map(p=>{
+          const r=dr[p.id]||{dots:0,dollarDiscount:0};
+          const dots=Math.max(0,r.dots);
+          const dotsOwed=owedFor(dots,r.dollarDiscount||0);
+          const carryIn=pBal(p,potKey); // positive = owes from prior weeks, negative = credit
+          const amountOwed=Math.max(0, dotsOwed + carryIn); // net total owed this week
+          return{playerId:p.id,name:p.name,dots,dotsOwed,carryIn,amountOwed,amountPaid:0};
+        });
+        return{potKey,label:potKey===MAIN_KEY?"Main Pot":"Side Pot ("+pList.map(p=>p.name).join(", ")+")",
+          playerIds:pList.map(p=>p.id),contributions:contribs,
+          totalOwed:contribs.reduce((t,c)=>t+c.amountOwed,0),totalPaid:0};
+      };
+      const present=s.players.filter(p=>!abs.has(p.id));
+      const absent=s.players.filter(p=>abs.has(p.id));
+      const sideKey=absent.length>0?"side-wk"+s.session.weekNum:null;
+      const groups=[]; if(present.length>0)groups.push(mkGroup(present,MAIN_KEY)); if(absent.length>0)groups.push(mkGroup(absent,sideKey));
+      const newPlayers=s.players.map(p=>{
+        const key=abs.has(p.id)?sideKey:MAIN_KEY;
+        const r=dr[p.id]||{dots:0,dollarDiscount:0};
+        const dotsOwed=owedFor(Math.max(0,r.dots),r.dollarDiscount||0);
+        const carryIn=pBal(p,key);
+        // New balance = this week's dots owed + prior carry (payments will subtract from this)
+        const newBalance=dotsOwed + carryIn;
+        return{...p,balance:{...(p.balance||{}),[key]:newBalance}};
+      });
+      return{players:newPlayers,session:null,weekHistory:[...s.weekHistory,{weekNum:s.session.weekNum,date:new Date().toLocaleDateString(),groups,dotResults:dr,gameScores:s.session.gameScores||{}}]};
+    });
+    setShowClose(false);
+  };
+
+  // ── Payments ──────────────────────────────────────────────────────────────
+  const recPay=(wkNum,potKey,pid,amount)=>{
+    const amt=parseFloat(amount); if(isNaN(amt)||amt<=0)return;
+    upd(s=>{
+      const newHistory=s.weekHistory.map(wk=>{ if(wk.weekNum!==wkNum)return wk; const ng=wk.groups.map(g=>{ if(g.potKey!==potKey)return g; const nc=g.contributions.map(c=>c.playerId===pid?{...c,amountPaid:(c.amountPaid||0)+amt}:c); return{...g,contributions:nc,totalPaid:nc.reduce((t,c)=>t+(c.amountPaid||0),0)}; }); return{...wk,groups:ng}; });
+      const np=s.players.map(p=>{ if(p.id!==pid)return p; return{...p,balance:{...(p.balance||{}),[potKey]:((p.balance||{})[potKey]||0)-amt},paid:{...(p.paid||{}),[potKey]:((p.paid||{})[potKey]||0)+amt}}; });
+      return{weekHistory:newHistory,players:np};
+    });
+  };
+
+  const resetSeason=()=>{ if(!window.confirm("Reset entire season?"))return; setState({...initState(),players:players.map(p=>({...p,stats:{},balance:{},paid:{}}))}); };
+
+  // ── Roster Row ────────────────────────────────────────────────────────────
+  const RosterRow=({p,index,isSub})=>{
+    const c=COLORS[p.colorIdx];
+    const editingAvgNow=editAvg.hasOwnProperty(p.id);
+    const editingNameNow=editName.hasOwnProperty(p.id);
+    return(
+      <div className="roster-row" style={{background:isSub?"rgba(247,37,133,0.06)":c.bg+"0a",border:`1px solid ${isSub?"rgba(247,37,133,0.2)":c.bg+"25"}`}}>
+        <div className="avatar" style={{width:isSub?32:34,height:isSub?32:34,background:c.bg,color:c.text,fontSize:isSub?14:15,flexShrink:0}}>{isSub?p.name.charAt(0):index+1}</div>
+        <div className="flex-1">
+          {editingNameNow?(
+            <div className="flex items-center gap-6">
+              <input autoFocus value={editName[p.id]} onChange={e=>setEditName(prev=>({...prev,[p.id]:e.target.value}))} onKeyDown={e=>{if(e.key==="Enter")saveEditName(p.id);if(e.key==="Escape"){const n={...editName};delete n[p.id];setEditName(n);}}} style={{flex:1,padding:"4px 8px",borderRadius:6,background:"#080814",border:`1px solid ${c.bg}80`,color:"#fff",fontSize:13,outline:"none"}}/>
+              <button onClick={()=>saveEditName(p.id)} style={{padding:"4px 10px",borderRadius:6,background:c.bg,border:"none",color:c.text,fontSize:11,fontWeight:700}}>SAVE</button>
+              <button onClick={()=>{const n={...editName};delete n[p.id];setEditName(n);}} style={{padding:"4px 8px",borderRadius:6,background:"transparent",border:"1px solid #333",color:"#666",fontSize:11}}>✕</button>
+            </div>
+          ):(
+            <div className="flex items-center gap-6">
+              <span style={{fontSize:14,fontWeight:700}}>{p.name}</span>
+              {isSub&&<span style={{fontSize:10,color:"#F72585",fontWeight:700}}>SUB</span>}
+              <button onClick={()=>setEditName(prev=>({...prev,[p.id]:p.name}))} style={{background:"transparent",border:"none",padding:0,fontSize:11,color:"#333"}}>✏️</button>
+            </div>
+          )}
+          {editingAvgNow?(
+            <div className="flex items-center gap-6 mt-4">
+              <input autoFocus type="number" value={editAvg[p.id]} placeholder="Avg" onChange={e=>setEditAvg(prev=>({...prev,[p.id]:e.target.value}))} onKeyDown={e=>{if(e.key==="Enter")updateAvg(p.id,editAvg[p.id]);}} style={{width:90,padding:"4px 8px",borderRadius:6,background:"#080814",border:`1px solid ${c.bg}60`,color:"#fff",fontSize:13,outline:"none"}}/>
+              <button onClick={()=>updateAvg(p.id,editAvg[p.id])} style={{padding:"4px 10px",borderRadius:6,background:c.bg,border:"none",color:c.text,fontSize:11,fontWeight:700}}>SAVE</button>
+              <button onClick={()=>{const n={...editAvg};delete n[p.id];setEditAvg(n);}} style={{padding:"4px 8px",borderRadius:6,background:"transparent",border:"1px solid #333",color:"#666",fontSize:11}}>✕</button>
+            </div>
+          ):(
+            <button onClick={()=>setEditAvg(prev=>({...prev,[p.id]:p.average||""}))} style={{background:"transparent",border:"none",padding:0,display:"flex",alignItems:"center",gap:5,marginTop:2}}>
+              <span className="mono" style={{fontSize:11,color:p.average?c.bg:"#444"}}>{p.average?"Avg "+p.average:"Tap to set avg"}</span>
+              <span style={{fontSize:10,color:"#333"}}>✏️</span>
+            </button>
+          )}
+        </div>
+        <button onClick={()=>removePlayer(p.id,isSub)} style={{padding:"4px 10px",borderRadius:6,background:"transparent",border:"1px solid rgba(255,68,68,0.2)",color:"#ff4444",fontSize:11,flexShrink:0}}>✕</button>
+      </div>
+    );
+  };
+
+  // ─── SETUP SCREEN ───────────────────────────────────────────────────────────
+  if(!session) return(
+    <div id="app" style={{paddingBottom:80}}>
+      <div style={{background:"linear-gradient(135deg,#0f0f24,#14102a)",borderBottom:"1px solid rgba(255,255,255,0.06)",padding:"20px 20px 16px"}}>
+        <div style={{fontSize:26,fontWeight:700,color:"#FF6B35",letterSpacing:2,textTransform:"uppercase"}}>🎳 Dot Game</div>
+        <div className="mono" style={{fontSize:10,color:"#444",letterSpacing:3,marginTop:2,textTransform:"uppercase"}}>Week {seasonNum} · Session Setup</div>
+      </div>
+      <div style={{padding:"20px 16px"}}>
+        <div className="card">
+          <div className="section-label" style={{color:"#4ECDC4"}}>Regular Lineup</div>
+          <div className="section-sub">Tap ✏️ to edit name or average. Tap ✕ to remove.</div>
+          {players.filter(p=>p.isRegular).map((p,i)=><RosterRow key={p.id} p={p} index={i} isSub={false}/>)}
+          <div className="flex gap-8 mt-8">
+            <input className="inp flex-1" value={newRegName} onChange={e=>setNewRegName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addRegular()} placeholder="Add player name"/>
+            <input className="inp" type="number" value={newRegAvg} onChange={e=>setNewRegAvg(e.target.value)} style={{width:70}} placeholder="Avg"/>
+            <button onClick={addRegular} style={{padding:"9px 14px",borderRadius:8,background:"linear-gradient(135deg,#4ECDC4,#2eada5)",border:"none",color:"#0a0a14",fontWeight:700,fontSize:13}}>+ Add</button>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="section-label" style={{color:"#F72585"}}>Subs Tonight</div>
+          <div className="section-sub">Add a substitute for this session.</div>
+          {players.filter(p=>!p.isRegular).map(p=><RosterRow key={p.id} p={p} index={0} isSub={true}/>)}
+          <div className="flex gap-8">
+            <input className="inp flex-1" value={subName} onChange={e=>setSubName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addSub()} placeholder="Sub name"/>
+            <input className="inp" type="number" value={subAvg} onChange={e=>setSubAvg(e.target.value)} style={{width:70}} placeholder="Avg"/>
+            <button onClick={addSub} style={{padding:"9px 14px",borderRadius:8,background:"linear-gradient(135deg,#F72585,#c01060)",border:"none",color:"#fff",fontWeight:700,fontSize:13}}>+ Sub</button>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="section-label" style={{color:"#C77DFF"}}>Who's Absent Tonight?</div>
+          <div className="section-sub">Absent players bowl in a separate side pot.</div>
+          <div className="presence-section">
+            {players.map(p=>{ const absent=absentDraft.has(p.id); const c=COLORS[p.colorIdx]; return(
+              <button key={p.id} onClick={()=>setAbsentDraft(prev=>{const n=new Set(prev);n.has(p.id)?n.delete(p.id):n.add(p.id);return n;})}
+                style={{display:"flex",alignItems:"center",gap:8,padding:"8px 14px",borderRadius:24,border:`2px solid ${absent?"rgba(255,68,68,0.4)":c.bg+"60"}`,background:absent?"rgba(255,68,68,0.07)":c.bg+"10",transition:"all .15s"}}>
+                <div className="avatar" style={{width:26,height:26,background:absent?"#2a1a1a":c.bg,color:absent?"#ff4444":c.text,fontSize:12,opacity:absent?0.6:1}}>{p.name.charAt(0)}</div>
+                <span style={{fontSize:13,fontWeight:700,color:absent?"#ff4444":"#ddd",textDecoration:absent?"line-through":"none"}}>{p.name}</span>
+                <span style={{fontSize:14}}>{absent?"🚫":"✓"}</span>
+              </button>
+            );})}
+          </div>
+          {absentDraft.size>0&&(
+            <div className="flex gap-8 mt-14">
+              <div style={{flex:1,padding:"10px 12px",background:"rgba(255,230,109,0.04)",border:"1px solid rgba(255,230,109,0.15)",borderRadius:10}}>
+                <div style={{fontSize:9,fontWeight:700,letterSpacing:2,color:"#FFE66D",textTransform:"uppercase",marginBottom:6}}>🎳 Main Pot</div>
+                {players.filter(p=>!absentDraft.has(p.id)).map(p=><div key={p.id} style={{fontSize:12,color:"#ccc",marginBottom:2}}>• {p.name}</div>)}
+              </div>
+              <div style={{flex:1,padding:"10px 12px",background:"rgba(199,125,255,0.04)",border:"1px solid rgba(199,125,255,0.15)",borderRadius:10}}>
+                <div style={{fontSize:9,fontWeight:700,letterSpacing:2,color:"#C77DFF",textTransform:"uppercase",marginBottom:6}}>🚫 Side Pot</div>
+                {players.filter(p=>absentDraft.has(p.id)).map(p=><div key={p.id} style={{fontSize:12,color:"#ccc",marginBottom:2}}>• {p.name}</div>)}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {weekHistory.length>0&&(
+          <div className="card">
+            <div className="section-label mb-12" style={{color:"#FFE66D"}}>Season At A Glance</div>
+            <div className="flex gap-10 wrap">
+              <div style={{flex:1,minWidth:100,padding:"10px 14px",background:"rgba(255,230,109,0.05)",border:"1px solid rgba(255,230,109,0.15)",borderRadius:10,textAlign:"center"}}>
+                <div style={{fontSize:24,fontWeight:700,color:"#FFE66D"}}>${mainTotal.toFixed(2)}</div>
+                <div style={{fontSize:10,color:"#666"}}>Main Pot</div>
+              </div>
+              {sideTotals.map(({key,total})=>(
+                <div key={key} style={{flex:1,minWidth:100,padding:"10px 14px",background:"rgba(199,125,255,0.05)",border:"1px solid rgba(199,125,255,0.15)",borderRadius:10,textAlign:"center"}}>
+                  <div style={{fontSize:24,fontWeight:700,color:"#C77DFF"}}>${total.toFixed(2)}</div>
+                  <div style={{fontSize:10,color:"#666"}}>Side Pot</div>
+                </div>
+              ))}
+            </div>
+            <button onClick={()=>exportToExcel(players,weekHistory)} style={{marginTop:12,width:"100%",padding:"10px",borderRadius:10,background:"linear-gradient(135deg,#06D6A0,#02a077)",border:"none",color:"#0a0a14",fontWeight:700,fontSize:13}}>
+              📊 Export to Excel
+            </button>
+          </div>
+        )}
+
+        <button onClick={startSession} style={{width:"100%",padding:"16px",borderRadius:14,background:"linear-gradient(135deg,#FF6B35,#e55520)",border:"none",color:"#fff",fontWeight:700,fontSize:18,letterSpacing:2,textTransform:"uppercase",boxShadow:"0 4px 24px rgba(255,107,53,0.25)",marginBottom:12}}>
+          🎳 Start Week {seasonNum}
+        </button>
+        {weekHistory.length>0&&(
+          <button onClick={resetSeason} style={{width:"100%",padding:"10px",borderRadius:10,background:"transparent",border:"1px solid rgba(255,68,68,0.16)",color:"#ff4444",fontSize:11,fontWeight:700}}>🗑 Reset Entire Season</button>
+        )}
+      </div>
+    </div>
+  );
+
+  // ─── ACTIVE SESSION ───────────────────────────────────────────────────────────
+  // These run only when session exists (past the early return above)
+  let liveDots = null;
+  try { liveDots = analyzeDots(players, session); } catch(e) { console.error('analyzeDots error:', e); }
+
+  const closePreview=()=>{
+    if(!liveDots)return[];
+    const mk=(pList,label,color)=>({label,color,players:pList,total:pList.reduce((t,p)=>{ const r=liveDots[p.id]||{dots:0,dollarDiscount:0}; return t+owedFor(Math.max(0,r.dots),r.dollarDiscount||0); },0)});
+    const res=[];
+    if(presentPlayers.length)res.push(mk(presentPlayers,"Main Pot","#FFE66D"));
+    if(absentPlayers.length)res.push(mk(absentPlayers,"Side Pot","#C77DFF"));
+    return res;
+  };
+
+  const renderGroup=(gPlayers,label,accent)=>{
+    if(!gPlayers.length)return null;
+    return(
+      <div style={{marginBottom:20}}>
+        <div className="flex justify-between items-center mb-12">
+          <div style={{fontSize:11,fontWeight:700,color:accent,letterSpacing:3,textTransform:"uppercase"}}>{label}</div>
+          <div className="mono" style={{fontSize:10,color:"#444"}}>Game {activeGame+1} / {gameCount}</div>
+        </div>
+        {gPlayers.map(p=>{
+          const series=seriesTotal(p.id);
+          return(
+            <div key={p.id}>
+              <ScoreSheet player={p}
+                frames={(session.playerGames[p.id]||[emptyGame()])[activeGame]||emptyGame()}
+                gameScore={((session.gameScores||{})[p.id]||{})[activeGame]||""}
+                onUpdate={nf=>updateFrames(p.id,activeGame,nf)}
+                onScoreChange={val=>updateScore(p.id,activeGame,val)}/>
+              {series!==null&&gameCount>1&&(
+                <div style={{textAlign:"right",marginTop:-8,marginBottom:8,paddingRight:14,fontSize:11,color:"#FFE66D",fontWeight:700}}>
+                  Series: {series}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  return(
+    <div id="app" style={{paddingBottom:100}}>
+      <div style={{background:"linear-gradient(135deg,#0f0f24,#14102a)",borderBottom:"1px solid rgba(255,255,255,0.06)",padding:"14px 16px 12px",position:"sticky",top:0,zIndex:50}}>
+        <div className="flex justify-between items-center mb-12">
+          <div>
+            <div style={{fontSize:20,fontWeight:700,color:"#FF6B35",letterSpacing:2,textTransform:"uppercase"}}>🎳 Dot Game</div>
+            <div className="mono" style={{fontSize:10,color:"#444",letterSpacing:3,textTransform:"uppercase"}}>
+              Wk {session.weekNum} · Gm {activeGame+1}/{gameCount}
+              {absentPlayers.length>0&&<span style={{color:"#C77DFF"}}> · {absentPlayers.length} Absent</span>}
+            </div>
+          </div>
+          <div className="flex gap-12">
+            <div className="text-right">
+              <div className="mono" style={{fontSize:9,color:"#444",textTransform:"uppercase"}}>Main Pot</div>
+              <div style={{fontSize:18,fontWeight:700,color:"#FFE66D",lineHeight:1}}>${mainTotal.toFixed(2)}</div>
+            </div>
+            {sideTotals.map(({key,total})=>(
+              <div key={key} className="text-right">
+                <div className="mono" style={{fontSize:9,color:"#444",textTransform:"uppercase"}}>Side Pot</div>
+                <div style={{fontSize:18,fontWeight:700,color:"#C77DFF",lineHeight:1}}>${total.toFixed(2)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="tab-bar">
+          {[["game","🎳","Scores"],["dots","⚡","Dots"],["pot","💰","Pot"],["stats","📊","Stats"],["rules","📋","Rules"]].map(([id,icon,lbl])=>(
+            <button key={id} className={"tab-btn"+(tab===id?" active":"")} onClick={()=>setTab(id)}>
+              <span>{icon}</span>{lbl}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{padding:"14px 12px"}}>
+
+        {/* ═══ SCORES ═══ */}
+        {tab==="game"&&<>
+          <div className="flex gap-8 mb-14 items-center">
+            {gameCount>1&&(
+              <div className="game-tabs">
+                {Array.from({length:gameCount},(_,i)=>(
+                  <button key={i} className={"game-tab"+(activeGame===i?" active":"")} onClick={()=>setActiveGame(i)}>G{i+1}</button>
+                ))}
+              </div>
+            )}
+            <button onClick={nextGame} style={{flex:1,padding:"9px 4px",borderRadius:8,background:"rgba(255,107,53,0.07)",border:"1px solid rgba(255,107,53,0.25)",color:"#FF6B35",fontWeight:700,fontSize:10,letterSpacing:1,textTransform:"uppercase"}}>▶ Next Game</button>
+            <button onClick={()=>setShowClose(true)} style={{flex:1,padding:"9px 4px",borderRadius:8,background:"rgba(255,230,109,0.07)",border:"1px solid rgba(255,230,109,0.25)",color:"#FFE66D",fontWeight:700,fontSize:10,letterSpacing:1,textTransform:"uppercase"}}>💰 Close Week</button>
+            <button onClick={()=>{if(window.confirm("Return to setup?"))upd(()=>({session:null}));}} style={{padding:"9px 10px",borderRadius:8,background:"rgba(78,205,196,0.07)",border:"1px solid rgba(78,205,196,0.25)",color:"#4ECDC4",fontWeight:700,fontSize:11}}>⚙</button>
+          </div>
+
+          {showClose&&(
+            <div className="confirm-box mb-14">
+              <div style={{fontWeight:700,color:"#FFE66D",fontSize:14,marginBottom:14}}>Close Week {session.weekNum}?</div>
+              {closePreview().map(g=>(
+                <div key={g.label} className="mb-12" style={{padding:"10px 12px",background:g.color+"08",border:`1px solid ${g.color}20`,borderRadius:10}}>
+                  <div style={{fontWeight:700,fontSize:10,color:g.color,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>{g.label}</div>
+                  {g.players.map(p=>{ const r=liveDots[p.id]||{dots:0,dollarDiscount:0}; const owed=owedFor(Math.max(0,r.dots),r.dollarDiscount||0); return<div key={p.id} className="flex justify-between" style={{fontSize:13,color:"#ccc",padding:"3px 0"}}><span>{p.name} ({Math.max(0,r.dots)} dots)</span><span style={{color:g.color}}>${owed.toFixed(2)}</span></div>; })}
+                  <div className="flex justify-between mt-8" style={{borderTop:"1px solid rgba(255,255,255,0.06)",paddingTop:8}}>
+                    <span style={{fontSize:12,color:"#666",fontWeight:700}}>Total</span>
+                    <span style={{fontSize:13,fontWeight:700,color:g.color}}>${g.total.toFixed(2)}</span>
+                  </div>
+                </div>
+              ))}
+              <div className="flex gap-8">
+                <button onClick={closeWeek} style={{flex:1,padding:"11px",borderRadius:8,background:"#FFE66D",border:"none",color:"#0a0a14",fontWeight:700,fontSize:13}}>✓ Confirm</button>
+                <button onClick={()=>setShowClose(false)} style={{flex:1,padding:"11px",borderRadius:8,background:"transparent",border:"1px solid #333",color:"#666",fontWeight:700,fontSize:13}}>Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {renderGroup(presentPlayers,"🎳 Present — Main Pot","#FFE66D")}
+          {absentPlayers.length>0&&renderGroup(absentPlayers,"🚫 Absent — Side Pot","#C77DFF")}
+
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",padding:"10px 14px",background:"#0f0f22",borderRadius:10,marginTop:8}}>
+            {[["X","#FFE66D","Strike"],["/","#4ECDC4","Spare"],["—","#FF6B35","Open"],["S","#F72585","Split miss"],["S/","#06D6A0","Split made"],["5","#C77DFF","Miss 5-pin"]].map(([s,c,l])=>(
+              <div key={l} className="flex items-center gap-6" style={{fontSize:11,color:"#444"}}>
+                <span className="mono" style={{fontWeight:700,color:c,fontSize:13}}>{s}</span>{l}
+              </div>
+            ))}
+          </div>
+        </>}
+
+        {/* ═══ DOTS ═══ */}
+        {tab==="dots"&&<>
+          <div className="section-label mb-14" style={{color:"#555"}}>Live Dot Summary · 50¢/Dot</div>
+          {players.map(p=>{
+            const r=liveDots[p.id]||{dots:0,dollarDiscount:0,events:[]};
+            const dots=Math.max(0,r.dots); const owed=owedFor(dots,r.dollarDiscount); const c=COLORS[p.colorIdx];
+            return(
+              <div key={p.id} className="dot-card mb-12" style={{border:`1.5px solid ${c.bg}28`}}>
+                <div className="dot-header" style={{background:`linear-gradient(135deg,${c.bg}12,transparent)`,borderBottom:`1px solid ${c.bg}1a`}}>
+                  <div className="flex items-center gap-10">
+                    <div className="avatar" style={{width:34,height:34,background:c.bg,color:c.text,fontSize:16,boxShadow:`0 0 12px ${c.bg}50`}}>{p.name.charAt(0)}</div>
+                    <div>
+                      <div style={{fontSize:15,fontWeight:700}}>{p.name}</div>
+                      <div style={{fontSize:10,color:"#444"}}>{absentSet.has(p.id)?"🚫 absent — side pot":"🎳 present — main pot"}</div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div style={{fontSize:26,fontWeight:700,color:"#FF6B35",lineHeight:1}}>{dots}</div>
+                    <div style={{fontSize:10,color:"#444"}}>dots</div>
+                    <div style={{fontSize:13,fontWeight:700,color:owed===0?"#4ECDC4":"#FFE66D"}}>{owed===0?"FREE!":"$"+owed.toFixed(2)}</div>
+                  </div>
+                </div>
+                {r.events.length>0&&(
+                  <div className="dot-events">
+                    {r.events.map((ev,i)=>(
+                      <div key={i} className="dot-event-row">
+                        <span style={{fontSize:14}}>{ev.icon}</span>
+                        <span style={{flex:1}}>{ev.label}</span>
+                        {ev.dots>0&&<span className="mono" style={{color:"#FF6B35",fontWeight:700}}>+{ev.dots}</span>}
+                        {ev.dollars&&<span className="mono" style={{color:"#4ECDC4",fontWeight:700}}>-${ev.dollars}</span>}
+                        {ev.wipe&&<span style={{color:"#FFE66D",fontWeight:700}}>WIPED</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          <div className="card">
+            <div className="section-label mb-12" style={{color:"#888"}}>⚡ Manual Events</div>
+            {[
+              {label:"Out of Turn",icon:"⏭️",dots:2},
+              {label:"Wrong Lane",icon:"🔀",dots:2},
+              {label:"Gutter Ball (1st throw)",icon:"🕳️",dots:2},
+              {label:"Miss Average",icon:"📉",dots:1},
+              {label:"100+ Under Avg",icon:"🤦",dots:20},
+            ].map(ev=>(
+              <div key={ev.label} className="mb-12">
+                <div style={{fontSize:12,color:"#666",marginBottom:6}}>{ev.icon} {ev.label} (+{ev.dots} dots)</div>
+                <div className="flex gap-6 wrap">
+                  {players.map(p=>{ const c=COLORS[p.colorIdx]; return<button key={p.id} onClick={()=>addManual(p.id,ev.dots,ev.label,ev.icon)} style={{padding:"5px 10px",borderRadius:8,background:c.bg+"18",border:`1px solid ${c.bg}40`,color:c.bg,fontSize:11,fontWeight:700}}>{p.name.split(" ")[0]}</button>; })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>}
+
+        {/* ═══ POT ═══ */}
+        {tab==="pot"&&<>
+          {/* Pot totals */}
+          <div className="flex gap-10 mb-16">
+            <div style={{flex:1,background:"linear-gradient(135deg,#1a1208,#181400)",border:"1px solid rgba(255,230,109,0.15)",borderRadius:14,padding:18,textAlign:"center"}}>
+              <div style={{fontSize:10,fontWeight:700,color:"#666",letterSpacing:3,textTransform:"uppercase",marginBottom:4}}>Main Pot</div>
+              <div style={{fontSize:38,fontWeight:700,color:"#FFE66D",lineHeight:1}}>${mainTotal.toFixed(2)}</div>
+              {players.length>0&&mainTotal>0&&<div style={{fontSize:11,color:"#888",marginTop:6}}>${(mainTotal/Math.max(1,presentPlayers.length)).toFixed(2)} ea</div>}
+            </div>
+            {sideTotals.map(({key,total})=>(
+              <div key={key} style={{flex:1,background:"linear-gradient(135deg,#14082a,#120818)",border:"1px solid rgba(199,125,255,0.15)",borderRadius:14,padding:18,textAlign:"center"}}>
+                <div style={{fontSize:10,fontWeight:700,color:"#666",letterSpacing:3,textTransform:"uppercase",marginBottom:4}}>Side Pot</div>
+                <div style={{fontSize:38,fontWeight:700,color:"#C77DFF",lineHeight:1}}>${total.toFixed(2)}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Who owes what right now */}
+          <div className="card mb-16">
+            <div className="section-label mb-14" style={{color:"#FF6B35"}}>Current Balances</div>
+            {players.map(p=>{
+              const keys=Object.keys(p.balance||{});
+              const hasAny=keys.some(k=>Math.abs((p.balance||{})[k]||0)>0.005);
+              const c=COLORS[p.colorIdx];
+              return(
+                <div key={p.id} className="balance-row" style={{background:hasAny?"rgba(255,107,53,0.06)":"rgba(6,214,160,0.06)",border:`1px solid ${hasAny?"rgba(255,107,53,0.2)":"rgba(6,214,160,0.2)"}`}}>
+                  <div className="flex items-center gap-10" style={{marginBottom:hasAny?6:0}}>
+                    <div className="avatar" style={{width:32,height:32,background:c.bg,color:c.text,fontSize:14}}>{p.name.charAt(0)}</div>
+                    <div className="flex-1">
+                      <div style={{fontWeight:700,fontSize:14}}>{p.name}</div>
+                      <div className="mono" style={{fontSize:10,color:"#444"}}>
+                        {Object.entries(p.paid||{}).map(([k,v])=>(k===MAIN_KEY?"main":"side")+" $"+v.toFixed(2)).join(" · ")||"nothing paid yet"}
+                      </div>
+                    </div>
+                    {!hasAny&&<div style={{fontSize:13,fontWeight:700,color:"#06D6A0"}}>✓ Settled</div>}
+                  </div>
+                  {hasAny&&keys.map(k=>{
+                    const bal=(p.balance||{})[k]||0;
+                    if(Math.abs(bal)<0.005)return null;
+                    return(
+                      <div key={k} className="flex justify-between" style={{fontSize:12,padding:"4px 0",borderTop:"1px solid rgba(255,255,255,0.04)"}}>
+                        <span style={{color:"#555"}}>{k===MAIN_KEY?"Main Pot":"Side Pot"}</span>
+                        <span style={{fontWeight:700,color:bal>0?"#FFE66D":"#4ECDC4"}}>
+                          {bal>0?"Owes $"+bal.toFixed(2):"Credit $"+Math.abs(bal).toFixed(2)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+
+          {weekHistory.length>0?(
+            <div className="card">
+              <div className="section-label mb-14" style={{color:"#4ECDC4"}}>Week History & Payments</div>
+              {[...weekHistory].reverse().map(wk=>{
+                const isOpen=expandedWeek===wk.weekNum; const settled=wk.groups.every(g=>Math.abs(g.totalOwed-(g.totalPaid||0))<0.01);
+                return(
+                  <div key={wk.weekNum} className="week-row">
+                    <button className="week-header" onClick={()=>setExpandedWeek(isOpen?null:wk.weekNum)}>
+                      <div className="flex items-center gap-10 wrap">
+                        <span style={{fontWeight:700,color:"#4ECDC4",fontSize:13}}>Week {wk.weekNum}</span>
+                        <span className="mono" style={{fontSize:11,color:"#444"}}>{wk.date}</span>
+                        {wk.groups.some(g=>g.potKey!==MAIN_KEY)&&<span style={{fontSize:9,fontWeight:700,color:"#C77DFF",background:"rgba(199,125,255,0.1)",padding:"1px 6px",borderRadius:8}}>Side Pot</span>}
+                        <span style={{fontSize:9,fontWeight:700,color:settled?"#06D6A0":"#FF6B35",background:settled?"rgba(6,214,160,0.1)":"rgba(255,107,53,0.1)",padding:"1px 6px",borderRadius:8}}>{settled?"✓ Settled":"Pending"}</span>
+                      </div>
+                      <div className="flex gap-8 items-center">
+                        <div className="text-right">{wk.groups.map(g=><div key={g.potKey} style={{fontSize:11,fontWeight:700,color:g.potKey===MAIN_KEY?"#FFE66D":"#C77DFF"}}>${(g.totalPaid||0).toFixed(2)}<span style={{color:"#333",fontSize:9}}>/${g.totalOwed.toFixed(2)}</span></div>)}</div>
+                        <span style={{color:"#444",fontSize:12}}>{isOpen?"▲":"▼"}</span>
+                      </div>
+                    </button>
+                    {isOpen&&(
+                      <div className="week-body">
+                        {wk.groups.map((g,gi)=>(
+                          <div key={g.potKey} style={{marginBottom:gi<wk.groups.length-1?16:0}}>
+                            <div style={{fontWeight:700,fontSize:10,color:g.potKey===MAIN_KEY?"#FFE66D":"#C77DFF",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>{g.label}</div>
+                            {g.contributions.map(c=><PayRow key={c.playerId} c={c} players={players} onPay={amt=>recPay(wk.weekNum,g.potKey,c.playerId,amt)}/>)}
+                            <div className="flex justify-between" style={{padding:"6px 10px",background:"#080814",borderRadius:8,fontSize:12}}>
+                              <span style={{color:"#444"}}>Collected</span>
+                              <span style={{fontWeight:700,color:g.potKey===MAIN_KEY?"#FFE66D":"#C77DFF"}}>${(g.totalPaid||0).toFixed(2)} / ${g.totalOwed.toFixed(2)}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ):(
+            <div className="empty-state"><div className="empty-icon">💰</div><div className="empty-text">No weeks closed yet</div></div>
+          )}
+
+          <button onClick={()=>exportToExcel(players,weekHistory)} style={{width:"100%",padding:"12px",borderRadius:12,background:"linear-gradient(135deg,#06D6A0,#02a077)",border:"none",color:"#0a0a14",fontWeight:700,fontSize:14,marginTop:8}}>
+            📊 Export to Excel
+          </button>
+        </>}
+
+        {/* ═══ STATS ═══ */}
+        {tab==="stats"&&<>
+          <div className="section-label mb-14" style={{color:"#555"}}>Season Stats</div>
+          <div className="flex gap-6 wrap mb-16">
+            <button onClick={()=>setStatPlayer(null)} style={{padding:"6px 14px",borderRadius:20,border:"1px solid #333",background:!statPlayer?"#FF6B35":"transparent",color:!statPlayer?"#fff":"#555",fontWeight:700,fontSize:10,letterSpacing:1,textTransform:"uppercase"}}>All</button>
+            {players.map(p=>{ const c=COLORS[p.colorIdx],sel=statPlayer===p.id; return<button key={p.id} onClick={()=>setStatPlayer(sel?null:p.id)} style={{padding:"6px 14px",borderRadius:20,border:`1px solid ${c.bg}50`,background:sel?c.bg:"transparent",color:sel?c.text:c.bg,fontWeight:700,fontSize:10,letterSpacing:1,textTransform:"uppercase"}}>{p.name.split(" ")[0]}</button>; })}
+          </div>
+
+          {weekHistory.length===0?(
+            <div className="empty-state"><div className="empty-icon">📊</div><div className="empty-text">No data yet</div></div>
+          ):(<>
+            {(()=>{
+              const sps=statPlayer?players.filter(p=>p.id===statPlayer):players;
+              const totalPaid=p=>Object.values(p.paid||{}).reduce((t,v)=>t+v,0);
+              const agg={};
+              sps.forEach(p=>{ agg[p.id]={opens:0,splits:0,smallPicks:0,largePicks:0,sevenTen:0,turkeys:0,streaks:0,hung:0,miss5:0,name:p.name,colorIdx:p.colorIdx,paid:totalPaid(p)}; });
+              weekHistory.forEach(wk=>{ if(!wk.dotResults)return; Object.entries(wk.dotResults).forEach(([pid,dr])=>{ const a=agg[parseInt(pid)];if(!a)return; (dr.events||[]).forEach(ev=>{ if(ev.icon==="😬"&&!ev.label.includes("from"))a.opens++; if(ev.icon==="🎳"&&!ev.label.includes("from"))a.splits++; if(ev.icon==="👏"&&!ev.label.includes("from"))a.smallPicks++; if(ev.icon==="🎉"&&!ev.label.includes("from"))a.largePicks++; if(ev.icon==="👑"&&!ev.label.includes("from"))a.sevenTen++; if(ev.icon==="🦃"&&!ev.label.includes("from"))a.turkeys++; if(ev.icon==="🔥"&&!ev.label.includes("from"))a.streaks++; if(ev.icon==="🪝"&&!ev.label.includes("from"))a.hung++; if(ev.icon==="🎯"&&!ev.label.includes("from"))a.miss5++; }); }); });
+              const entries=Object.values(agg);
+
+              // Scores data for series averages
+              const scoreStats={};
+              sps.forEach(p=>{ scoreStats[p.id]={games:[],name:p.name,colorIdx:p.colorIdx}; });
+              weekHistory.forEach(wk=>{ if(!wk.gameScores)return; Object.entries(wk.gameScores).forEach(([pid,gs])=>{ const ss=scoreStats[parseInt(pid)]; if(!ss)return; Object.values(gs).forEach(v=>{ const n=parseInt(v); if(!isNaN(n)&&n>0)ss.games.push(n); }); }); });
+
+              return(<>
+                {/* Season paid */}
+                <div className="card mb-14">
+                  <div className="section-label mb-12" style={{color:"#FFE66D"}}>💸 Total Paid (Season)</div>
+                  {[...sps].sort((a,b)=>totalPaid(b)-totalPaid(a)).map((p,i)=>{ const c=COLORS[p.colorIdx],tot=totalPaid(p),side=Object.entries(p.paid||{}).filter(([k])=>k!==MAIN_KEY).reduce((t,[,v])=>t+v,0); return(
+                    <div key={p.id} className="flex items-center gap-10 mb-8">
+                      <span style={{fontSize:16,width:24}}>{!statPlayer&&(i===0?"🥇":i===1?"🥈":i===2?"🥉":"")}</span>
+                      <div style={{width:8,height:8,borderRadius:"50%",background:c.bg,flexShrink:0}}/>
+                      <span style={{flex:1,fontSize:13}}>{p.name}</span>
+                      <div className="text-right">
+                        <div style={{fontWeight:700,color:"#FFE66D",fontSize:15}}>${tot.toFixed(2)}</div>
+                        {side>0&&<div style={{fontSize:10,color:"#C77DFF"}}>${side.toFixed(2)} side</div>}
+                      </div>
+                    </div>
+                  ); })}
+                </div>
+
+                {/* Score averages */}
+                {Object.values(scoreStats).some(ss=>ss.games.length>0)&&(
+                  <div className="card mb-14">
+                    <div className="section-label mb-12" style={{color:"#4ECDC4"}}>🎳 Score Averages</div>
+                    {[...sps].filter(p=>scoreStats[p.id]&&scoreStats[p.id].games.length>0).sort((a,b)=>{
+                      const avgA=scoreStats[a.id].games.reduce((t,v)=>t+v,0)/scoreStats[a.id].games.length;
+                      const avgB=scoreStats[b.id].games.reduce((t,v)=>t+v,0)/scoreStats[b.id].games.length;
+                      return avgB-avgA;
+                    }).map((p,i)=>{
+                      const ss=scoreStats[p.id]; const avg=Math.round(ss.games.reduce((t,v)=>t+v,0)/ss.games.length);
+                      const hi=Math.max(...ss.games); const c=COLORS[p.colorIdx];
+                      return(
+                        <div key={p.id} className="flex items-center gap-10 mb-8">
+                          <span style={{fontSize:16,width:24}}>{!statPlayer&&(i===0?"🥇":i===1?"🥈":i===2?"🥉":"")}</span>
+                          <div style={{width:8,height:8,borderRadius:"50%",background:c.bg,flexShrink:0}}/>
+                          <span style={{flex:1,fontSize:13}}>{p.name}</span>
+                          <div className="text-right">
+                            <div style={{fontWeight:700,color:"#4ECDC4",fontSize:15}}>avg {avg}</div>
+                            <div style={{fontSize:10,color:"#555"}}>hi {hi} · {ss.games.length} games</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Event stat bars */}
+                {[{label:"Opens",key:"opens",icon:"😬"},{label:"Hung",key:"hung",icon:"🪝"},{label:"Splits Left",key:"splits",icon:"🎳"},{label:"Missed 5-Pin",key:"miss5",icon:"🎯"},{label:"Turkeys",key:"turkeys",icon:"🦃"},{label:"4+ Streaks",key:"streaks",icon:"🔥"},{label:"Small Picks",key:"smallPicks",icon:"👏"},{label:"Large Picks",key:"largePicks",icon:"🎉"},{label:"7-10 Picks",key:"sevenTen",icon:"👑"}].map(cat=>{
+                  const vals=entries.map(e=>({name:e.name,colorIdx:e.colorIdx,count:e[cat.key]})).filter(v=>v.count>0).sort((a,b)=>b.count-a.count);
+                  if(!vals.length)return null;
+                  const mx=vals[0].count;
+                  return(<div key={cat.key} className="card mb-10">
+                    <div className="flex items-center gap-6 mb-12"><span style={{fontSize:16}}>{cat.icon}</span><span style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:"#888"}}>{cat.label}</span></div>
+                    {vals.map(v=><StatBar key={v.name} label={v.name} value={v.count} max={mx} color={COLORS[v.colorIdx].bg}/>)}
+                  </div>);
+                })}
+
+                {/* Hall */}
+                <div className="card">
+                  <div className="section-label mb-14" style={{color:"#F72585"}}>Hall of Shame & Glory</div>
+                  {[
+                    {label:"Most Opens",key:"opens",icon:"😬",shame:true},
+                    {label:"Most Hung",key:"hung",icon:"🪝",shame:true},
+                    {label:"Most Splits Left",key:"splits",icon:"🎳",shame:true},
+                    {label:"Most Missed 5-Pin",key:"miss5",icon:"🎯",shame:true},
+                    {label:"Turkey King",key:"turkeys",icon:"🦃",shame:false},
+                    {label:"Streak Monster",key:"streaks",icon:"🔥",shame:false},
+                    {label:"Small Split Slayer",key:"smallPicks",icon:"👏",shame:false},
+                    {label:"Large Split Slayer",key:"largePicks",icon:"🎉",shame:false},
+                    {label:"7-10 Legend",key:"sevenTen",icon:"👑",shame:false},
+                    {label:"Most Paid",key:"paid",icon:"💸",shame:true},
+                  ].map(cat=>{ const sorted=[...entries].sort((a,b)=>b[cat.key]-a[cat.key]); const top=sorted[0]; if(!top||top[cat.key]===0)return null; const c=COLORS[top.colorIdx]; return(
+                    <div key={cat.key} className="hall-row">
+                      <span style={{fontSize:18}}>{cat.icon}</span>
+                      <div className="flex-1"><div style={{fontSize:10,color:"#444"}}>{cat.label}</div><div style={{fontSize:14,color:c.bg,fontWeight:700}}>{top.name}</div></div>
+                      <div style={{fontSize:18,fontWeight:700,color:cat.shame?"#FF6B35":"#4ECDC4"}}>{cat.key==="paid"?"$"+top[cat.key].toFixed(2):top[cat.key]+"×"}</div>
+                    </div>
+                  ); })}
+                </div>
+              </>);
+            })()}
+          </>)}
+        </>}
+
+        {/* ═══ RULES ═══ */}
+        {tab==="rules"&&(
+          <div>
+            <div className="section-label mb-12" style={{color:"#444"}}>Rule Reference · 50¢ Per Dot</div>
+            {[
+              {icon:"😬",label:"Open Frame",desc:"Failed to convert spare",val:"+2 dots"},
+              {icon:"🎯",label:"Missed 5-Pin",desc:"Left only the 5-pin standing (extra on top of open)",val:"+2 dots"},
+              {icon:"🎳",label:"Split Leave (missed)",desc:"Left a split and didn't convert",val:"+1 dot"},
+              {icon:"🚩",label:"First Team Open",desc:"Very first open frame of the game by anyone on the team",val:"+1 dot"},
+              {icon:"💀",label:"Open 10th Frame",desc:"Extra penalty for opening the 10th",val:"+2 dots"},
+              {icon:"🪝",label:"Hung",desc:"Only person in group not to strike in a frame (not spares)",val:"+2 dots"},
+              {icon:"🪝🪝",label:"Hung 2 in a row",desc:"Consecutive frames where same person is hung",val:"+3 dots"},
+              {icon:"🪝🪝🪝",label:"Hung 3+ in a row",desc:"Three+ consecutive hung frames",val:"+4 dots"},
+              {icon:"📉",label:"Miss Average",desc:"Final game score below your average",val:"+1 dot"},
+              {icon:"🕳️",label:"Gutter Ball (1st throw)",desc:"Gutter on first ball of a frame",val:"+2 dots"},
+              {icon:"⏭️",label:"Out of Turn",desc:"Bowled when it wasn't your turn",val:"+2 dots"},
+              {icon:"🔀",label:"Wrong Lane",desc:"Bowled on the wrong lane",val:"+2 dots"},
+              {icon:"💥",label:"Break Team Streak",desc:"Non-strike after 5+ consecutive team strikes in sequence",val:"+1 dot"},
+              {icon:"🤦",label:"100+ Under Average",desc:"Scored 100+ pins under your average",val:"+20 dots"},
+              {icon:"👏",label:"Small Split — Converted",desc:"Others each get 1 dot",val:"others +1"},
+              {icon:"🎉",label:"Large Split — Converted",desc:"Others each get 2 dots",val:"others +2"},
+              {icon:"🦃",label:"Turkey (3 strikes)",desc:"Others each get 1 dot",val:"others +1"},
+              {icon:"🔥",label:"4+ Strike Streak",desc:"Others get 2 dots per additional frame",val:"others +2"},
+              {icon:"🌟",label:"100+ Over Average",desc:"Scored 100+ pins over your average",val:"-$10"},
+              {icon:"👑",label:"7-10 Conversion",desc:"Wipes ALL your dots for the night",val:"WIPE ALL"},
+            ].map(ev=>(
+              <div key={ev.label} className="flex items-start gap-10" style={{background:"#0f0f22",borderRadius:10,padding:"10px 14px",border:"1px solid rgba(255,255,255,0.03)",marginBottom:5}}>
+                <span style={{fontSize:20,flexShrink:0}}>{ev.icon}</span>
+                <div className="flex-1"><div style={{fontSize:13,fontWeight:700,color:"#ddd"}}>{ev.label}</div><div style={{fontSize:11,color:"#444",marginTop:2}}>{ev.desc}</div></div>
+                <div style={{flexShrink:0,fontSize:12,fontWeight:700,color:ev.val.includes("WIPE")?"#FFE66D":ev.val.includes("-$")?"#4ECDC4":ev.val.includes("others")?"#C77DFF":"#FF6B35"}}>{ev.val}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("app")).render(React.createElement(App));
+</script>
+<script>
+if("serviceWorker"in navigator){
+  const sw=`self.addEventListener("install",()=>self.skipWaiting());self.addEventListener("activate",()=>self.clients.claim());self.addEventListener("fetch",e=>e.respondWith(fetch(e.request).catch(()=>new Response("offline"))));`;
+  navigator.serviceWorker.register(URL.createObjectURL(new Blob([sw],{type:"application/javascript"}))).catch(()=>{});
+}
+</script>
+</body>
+</html>
