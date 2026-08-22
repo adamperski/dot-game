@@ -397,20 +397,16 @@ function analyzeDots(players, session) {
         };
         if (o==="split-spare") processSplitSpare(splitType);
 
-        // ── 10th frame bonus throws ───────────────────────────────────────
+        // ── 10th frame bonus throws (fill balls) ────────────────────────────
+        // Fill balls are the bonus throw(s) earned by a strike or spare on
+        // the 10th's required attempt. Opening or leaving a split on a fill
+        // ball doesn't count against you — only a converted split still
+        // rewards the rest of the group.
         if (is10 && throwsList) {
-          // Process 2nd and 3rd throws of 10th
           for (let t=1; t<3; t++) {
             const th = throwsList[t];
             if (!th || !th.outcome) continue;
-            const to = th.outcome;
-            // Open on 2nd throw of 10th (only if 1st wasn't a strike — spare attempt)
-            if (t===1 && isOpen(to) && !isStrike(o)) {
-              dot(p.id,2,"Open 10th frame (bonus)","💀",gi);
-              if (to==="miss5") dot(p.id,2,"Missed 5-pin (10th)","🎯",gi);
-            }
-            if (to==="split-spare") processSplitSpare(th.splitType);
-            if (to==="split-open") dot(p.id,1,"Left a split (10th)","🎳",gi);
+            if (th.outcome==="split-spare") processSplitSpare(th.splitType);
           }
         }
       }
