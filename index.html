@@ -337,18 +337,24 @@ function analyzeDots(players, session) {
         if (o === null) { hangStreak=0; strikeStreak=0; continue; }
 
         // ── Personal strike streak (turkey / 4+) ──────────────────────────
-        if (isStrike(o)) {
-          strikeStreak++;
-          if (strikeStreak===3) {
-            dotOthers(p.id,grp,1,"Turkey by "+p.name,"🦃",gi);
-            res[p.id].events.push({label:"Turkey! (others +1)",icon:"🦃",dots:0,game:gi+1});
-          } else if (strikeStreak>=4) {
-            dotOthers(p.id,grp,2,strikeStreak+"-strike streak","🔥",gi);
-            res[p.id].events.push({label:strikeStreak+"-strike streak (others +2)",icon:"🔥",dots:0,game:gi+1});
+        // Shared by the frame's required throw and, in the 10th, each fill
+        // ball -- a strike on a fill ball still extends the streak (e.g.
+        // strikes in frames 7-9 plus both 10th-frame balls is 5 in a row).
+        const trackStrikeStreak = (struck) => {
+          if (struck) {
+            strikeStreak++;
+            if (strikeStreak===3) {
+              dotOthers(p.id,grp,1,"Turkey by "+p.name,"🦃",gi);
+              res[p.id].events.push({label:"Turkey! (others +1)",icon:"🦃",dots:0,game:gi+1});
+            } else if (strikeStreak>=4) {
+              dotOthers(p.id,grp,2,strikeStreak+"-strike streak","🔥",gi);
+              res[p.id].events.push({label:strikeStreak+"-strike streak (others +2)",icon:"🔥",dots:0,game:gi+1});
+            }
+          } else {
+            strikeStreak=0;
           }
-        } else {
-          strikeStreak=0;
-        }
+        };
+        trackStrikeStreak(isStrike(o));
 
         // ── Hung logic ────────────────────────────────────────────────────
         // Hung = only this player didn't strike, everyone else in group did
@@ -406,6 +412,7 @@ function analyzeDots(players, session) {
           for (let t=1; t<3; t++) {
             const th = throwsList[t];
             if (!th || !th.outcome) continue;
+            trackStrikeStreak(isStrike(th.outcome));
             if (th.outcome==="split-spare") processSplitSpare(th.splitType);
           }
         }
