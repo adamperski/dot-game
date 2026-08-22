@@ -424,12 +424,27 @@ function analyzeDots(players, session) {
         const score = parseInt(scoreInput);
         if (!isNaN(score)) {
           if (score < p.average) dot(p.id,1,"Missed average ("+score+" vs avg "+p.average+")","📉",gi);
-          if (p.average - score >= 100) dot(p.id,20,"100+ under average!","🤦",gi);
           if (score - p.average >= 100) disc(p.id,10,"100+ over average — $10 off!","🌟");
         }
       }
     });
   }
+
+  // ── Series-based check: 100+ under average across the whole series ─────
+  // (Sum of every game bowled this session vs. average × games bowled --
+  // not a single bad game, a bad night overall.)
+  players.forEach(p => {
+    if (!p.average) return;
+    const gs = (session.gameScores||{})[p.id]||{};
+    const entries = Object.entries(gs).map(([gi,v])=>[parseInt(gi),parseInt(v)]).filter(([,v])=>!isNaN(v));
+    if (entries.length === 0) return;
+    const seriesTotal = entries.reduce((t,[,v])=>t+v,0);
+    const expected = p.average * entries.length;
+    if (expected - seriesTotal >= 100) {
+      const lastGi = Math.max(...entries.map(([g])=>g));
+      dot(p.id,20,"100+ under average for the series ("+seriesTotal+" vs "+expected+")","🤦",lastGi);
+    }
+  });
 
   return res;
 }
@@ -1218,8 +1233,6 @@ function App() {
               {label:"Out of Turn",icon:"⏭️",dots:2},
               {label:"Wrong Lane",icon:"🔀",dots:2},
               {label:"Gutter Ball (1st throw)",icon:"🕳️",dots:2},
-              {label:"Miss Average",icon:"📉",dots:1},
-              {label:"100+ Under Avg",icon:"🤦",dots:20},
             ].map(ev=>(
               <div key={ev.label} className="mb-12">
                 <div style={{fontSize:12,color:"#666",marginBottom:6}}>{ev.icon} {ev.label} (+{ev.dots} dots)</div>
@@ -1453,7 +1466,7 @@ function App() {
               {icon:"⏭️",label:"Out of Turn",desc:"Bowled when it wasn't your turn",val:"+2 dots"},
               {icon:"🔀",label:"Wrong Lane",desc:"Bowled on the wrong lane",val:"+2 dots"},
               {icon:"💥",label:"Break Team Streak",desc:"Non-strike after 5+ consecutive team strikes in sequence",val:"+1 dot"},
-              {icon:"🤦",label:"100+ Under Average",desc:"Scored 100+ pins under your average",val:"+20 dots"},
+              {icon:"🤦",label:"100+ Under Average",desc:"Series total 100+ pins under average × games bowled (a bad night, not one bad game)",val:"+20 dots"},
               {icon:"👏",label:"Small Split — Converted",desc:"Others each get 1 dot",val:"others +1"},
               {icon:"🎉",label:"Large Split — Converted",desc:"Others each get 2 dots",val:"others +2"},
               {icon:"🦃",label:"Turkey (3 strikes)",desc:"Others each get 1 dot",val:"others +1"},
