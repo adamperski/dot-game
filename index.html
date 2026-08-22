@@ -213,6 +213,19 @@ function analyzeDots(players, session) {
       gameFrames[p.id] = games[gi]||emptyGame();
     });
 
+    // For frame fi, get outcome of player p (handle 10th frame specially)
+    const frameOutcome = (pid, fi) => {
+      const frames = gameFrames[pid];
+      if (!frames) return null;
+      if (fi < 9) return frames[fi] ? frames[fi].outcome : null;
+      // 10th frame: use first throw for hung/team-streak logic
+      const f10 = frames[9];
+      if (!f10 || !f10.throws) return null;
+      return f10.throws[0] ? f10.throws[0].outcome : null;
+    };
+
+    const groupOf = pid => absentSet.has(pid) ? absentIds : presentIds;
+
     // ── First team open tracking (per game, per group) ─────────────────────
     // Find the first frame index where any player in each group opened,
     // then award the dot to every player in that group who also opened that frame.
@@ -244,19 +257,6 @@ function analyzeDots(players, session) {
     //   - They did NOT strike in frame fi
     //   - Every other present bowler in their group DID strike in frame fi
     // Consecutive hung frames get escalating dots
-
-    const groupOf = pid => absentSet.has(pid) ? absentIds : presentIds;
-
-    // For frame fi, get outcome of player p (handle 10th frame specially)
-    const frameOutcome = (pid, fi) => {
-      const frames = gameFrames[pid];
-      if (!frames) return null;
-      if (fi < 9) return frames[fi] ? frames[fi].outcome : null;
-      // 10th frame: use first throw for hung/team-streak logic
-      const f10 = frames[9];
-      if (!f10 || !f10.throws) return null;
-      return f10.throws[0] ? f10.throws[0].outcome : null;
-    };
 
     // ── Team streak tracking (sequential, across frames) ───────────────────
     // Bowling order: frame 1 bowler 1, frame 1 bowler 2, ...frame 1 bowler N,
@@ -817,7 +817,8 @@ function App() {
     upd(s=>{
       if(!s.session)return s;
       const abs=new Set(s.session.absentIds);
-      const dr=analyzeDots(s.players,s.session);
+      let dr;
+      try { dr=analyzeDots(s.players,s.session); } catch(e) { console.error('closeWeek analyzeDots error:', e); window.alert("Couldn't close the week — something went wrong computing dots. Your entries are still saved; please try again or reload."); return s; }
       const pBal=(p,key)=>((p.balance||{})[key]||0);
       const mkGroup=(pList,potKey)=>{
         const contribs=pList.map(p=>{
@@ -992,8 +993,8 @@ function App() {
 
   // ─── ACTIVE SESSION ───────────────────────────────────────────────────────────
   // These run only when session exists (past the early return above)
-  let liveDots = null;
-  try { liveDots = analyzeDots(players, session); } catch(e) { console.error('analyzeDots error:', e); }
+  let liveDots = {};
+  try { liveDots = analyzeDots(players, session) || {}; } catch(e) { console.error('analyzeDots error:', e); }
 
   const closePreview=()=>{
     if(!liveDots)return[];
@@ -1417,7 +1418,30 @@ function App() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("app")).render(React.createElement(App));
+// ─── Error Boundary ───────────────────────────────────────────────────────────
+// If anything unexpected throws during render, show a recoverable screen instead
+// of a blank page — state is autosaved to localStorage on every change, so a
+// reload always picks back up where you left off.
+class ErrorBoundary extends React.Component {
+  constructor(props){ super(props); this.state={hasError:false}; }
+  static getDerivedStateFromError(){ return {hasError:true}; }
+  componentDidCatch(err,info){ console.error('App crashed:', err, info); }
+  render(){
+    if(this.state.hasError){
+      return (
+        <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,textAlign:"center"}}>
+          <div style={{fontSize:40,marginBottom:12}}>⚠️</div>
+          <div style={{fontWeight:700,fontSize:16,marginBottom:8}}>Something went wrong</div>
+          <div style={{fontSize:13,color:"#888",marginBottom:20,maxWidth:280}}>Your entries are saved automatically — reload to continue where you left off.</div>
+          <button onClick={()=>window.location.reload()} style={{padding:"12px 28px",borderRadius:10,background:"#FF6B35",border:"none",color:"#fff",fontWeight:700,fontSize:14}}>Reload</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+ReactDOM.createRoot(document.getElementById("app")).render(<ErrorBoundary><App/></ErrorBoundary>);
 </script>
 <script>
 if("serviceWorker"in navigator){
