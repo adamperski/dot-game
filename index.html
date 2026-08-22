@@ -178,6 +178,13 @@ const save = s => { try { localStorage.setItem(STORAGE_KEY,JSON.stringify(s)); }
 const owedFor = (dots,discount) => Math.max(0, Math.max(0,dots)*DOT_VALUE - (discount||0));
 const allPotKeys = wh => { const k=new Set(); wh.forEach(w=>w.groups.forEach(g=>k.add(g.potKey))); return [...k]; };
 const potTotal = (wh,key) => wh.reduce((s,w)=>{ const g=w.groups.find(g=>g.potKey===key); return s+(g?g.totalPaid||0:0); },0);
+// A side pot is a fresh bucket every week (whoever's absent that night), keyed "side-wk<N>" —
+// label it by week so multiple side pots never look like the same unlabeled "Side Pot" box.
+const potLabel = (wh,key) => {
+  if (key===MAIN_KEY) return "Main Pot";
+  const w = wh.find(w=>w.groups.some(g=>g.potKey===key));
+  return w ? "Side Pot · Wk "+w.weekNum : "Side Pot";
+};
 
 // ─── Dot Analysis ─────────────────────────────────────────────────────────────
 function analyzeDots(players, session) {
@@ -762,6 +769,7 @@ function App() {
   const presentPlayers=players.filter(p=>!absentSet.has(p.id));
   const absentPlayers =players.filter(p=> absentSet.has(p.id));
   const gameCount=session&&players.length>0?((session.playerGames[players[0].id]||[emptyGame()]).length):1;
+  const missingAvg=players.filter(p=>p.average==null);
 
   // ── Roster ────────────────────────────────────────────────────────────────
   const updateAvg=(id,val)=>{ const avg=val===""?null:parseInt(val); upd(s=>({players:s.players.map(p=>p.id===id?{...p,average:isNaN(avg)?null:avg}:p)})); setEditAvg(prev=>{const n={...prev};delete n[id];return n;}); };
@@ -773,6 +781,7 @@ function App() {
   // ── Session ───────────────────────────────────────────────────────────────
   const startSession=()=>{
     if(!players.length)return;
+    if(missingAvg.length>0){ window.alert("Set an average for everyone before starting the week:\n"+missingAvg.map(p=>"• "+p.name).join("\n")); return; }
     upd(s=>{
       const wkNum=s.weekHistory.length>0?s.weekHistory[s.weekHistory.length-1].weekNum+1:1;
       const pg={};
@@ -971,7 +980,7 @@ function App() {
               {sideTotals.map(({key,total})=>(
                 <div key={key} style={{flex:1,minWidth:100,padding:"10px 14px",background:"rgba(199,125,255,0.05)",border:"1px solid rgba(199,125,255,0.15)",borderRadius:10,textAlign:"center"}}>
                   <div style={{fontSize:24,fontWeight:700,color:"#C77DFF"}}>${total.toFixed(2)}</div>
-                  <div style={{fontSize:10,color:"#666"}}>Side Pot</div>
+                  <div style={{fontSize:10,color:"#666"}}>{potLabel(weekHistory,key)}</div>
                 </div>
               ))}
             </div>
@@ -981,8 +990,23 @@ function App() {
           </div>
         )}
 
-        <button onClick={startSession} style={{width:"100%",padding:"16px",borderRadius:14,background:"linear-gradient(135deg,#FF6B35,#e55520)",border:"none",color:"#fff",fontWeight:700,fontSize:18,letterSpacing:2,textTransform:"uppercase",boxShadow:"0 4px 24px rgba(255,107,53,0.25)",marginBottom:12}}>
-          🎳 Start Week {seasonNum}
+        {missingAvg.length>0&&(
+          <div className="card" style={{border:"1px solid rgba(255,68,68,0.3)",background:"rgba(255,68,68,0.05)"}}>
+            <div style={{fontWeight:700,fontSize:11,color:"#ff4444",letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>⚠️ Averages Needed</div>
+            <div style={{fontSize:12,color:"#ccc",marginBottom:10}}>Set an average for everyone before starting the week — averages drive the miss-average and over/under-average dot rules. Tap a name to set it.</div>
+            <div className="flex gap-6 wrap">
+              {missingAvg.map(p=>(
+                <button key={p.id} onClick={()=>setEditAvg(prev=>({...prev,[p.id]:""}))} style={{fontSize:11,fontWeight:700,color:"#ff4444",background:"rgba(255,68,68,0.12)",border:"1px solid rgba(255,68,68,0.3)",padding:"5px 12px",borderRadius:20}}>{p.name}</button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <button onClick={startSession} disabled={missingAvg.length>0} style={{width:"100%",padding:"16px",borderRadius:14,
+            background:missingAvg.length>0?"#20202e":"linear-gradient(135deg,#FF6B35,#e55520)",
+            border:"none",color:missingAvg.length>0?"#555":"#fff",fontWeight:700,fontSize:18,letterSpacing:2,textTransform:"uppercase",
+            boxShadow:missingAvg.length>0?"none":"0 4px 24px rgba(255,107,53,0.25)",marginBottom:12,cursor:missingAvg.length>0?"not-allowed":"pointer"}}>
+          {missingAvg.length>0?"🔒 Set Averages To Start":"🎳 Start Week "+seasonNum}
         </button>
         {weekHistory.length>0&&(
           <button onClick={resetSeason} style={{width:"100%",padding:"10px",borderRadius:10,background:"transparent",border:"1px solid rgba(255,68,68,0.16)",color:"#ff4444",fontSize:11,fontWeight:700}}>🗑 Reset Entire Season</button>
@@ -1052,7 +1076,7 @@ function App() {
             </div>
             {sideTotals.map(({key,total})=>(
               <div key={key} className="text-right">
-                <div className="mono" style={{fontSize:9,color:"#444",textTransform:"uppercase"}}>Side Pot</div>
+                <div className="mono" style={{fontSize:9,color:"#444",textTransform:"uppercase"}}>{potLabel(weekHistory,key)}</div>
                 <div style={{fontSize:18,fontWeight:700,color:"#C77DFF",lineHeight:1}}>${total.toFixed(2)}</div>
               </div>
             ))}
@@ -1185,7 +1209,7 @@ function App() {
             </div>
             {sideTotals.map(({key,total})=>(
               <div key={key} style={{flex:1,background:"linear-gradient(135deg,#14082a,#120818)",border:"1px solid rgba(199,125,255,0.15)",borderRadius:14,padding:18,textAlign:"center"}}>
-                <div style={{fontSize:10,fontWeight:700,color:"#666",letterSpacing:3,textTransform:"uppercase",marginBottom:4}}>Side Pot</div>
+                <div style={{fontSize:10,fontWeight:700,color:"#666",letterSpacing:3,textTransform:"uppercase",marginBottom:4}}>{potLabel(weekHistory,key)}</div>
                 <div style={{fontSize:38,fontWeight:700,color:"#C77DFF",lineHeight:1}}>${total.toFixed(2)}</div>
               </div>
             ))}
@@ -1215,7 +1239,7 @@ function App() {
                     if(Math.abs(bal)<0.005)return null;
                     return(
                       <div key={k} className="flex justify-between" style={{fontSize:12,padding:"4px 0",borderTop:"1px solid rgba(255,255,255,0.04)"}}>
-                        <span style={{color:"#555"}}>{k===MAIN_KEY?"Main Pot":"Side Pot"}</span>
+                        <span style={{color:"#555"}}>{potLabel(weekHistory,k)}</span>
                         <span style={{fontWeight:700,color:bal>0?"#FFE66D":"#4ECDC4"}}>
                           {bal>0?"Owes $"+bal.toFixed(2):"Credit $"+Math.abs(bal).toFixed(2)}
                         </span>
