@@ -190,12 +190,21 @@ const potLabel = (wh,key) => {
 function analyzeDots(players, session) {
   const absentSet = new Set(session.absentIds||[]);
   const res = {};
-  players.forEach(p => { res[p.id]={dots:0,dollarDiscount:0,events:[]}; });
+  // byGame: per-game dot subtotal (index = game number - 1). manualDots: dots not tied to any game.
+  players.forEach(p => { res[p.id]={dots:0,dollarDiscount:0,events:[],byGame:[],manualDots:0}; });
 
-  const dot = (pid,n,label,icon) => { res[pid].dots+=n; res[pid].events.push({label,icon,dots:n}); };
+  const dot = (pid,n,label,icon,gi) => {
+    res[pid].dots+=n;
+    res[pid].events.push({label,icon,dots:n,game:gi!=null?gi+1:null});
+    if (gi!=null) res[pid].byGame[gi]=(res[pid].byGame[gi]||0)+n; else res[pid].manualDots+=n;
+  };
   const disc = (pid,n,label,icon) => { res[pid].dollarDiscount+=n; res[pid].events.push({label,icon,dollars:n}); };
-  const dotOthers = (pid,gids,n,label,icon) => {
-    gids.filter(id=>id!==pid).forEach(id=>{ if(res[id]){res[id].dots+=n;res[id].events.push({label:label+" (from teammate)",icon,dots:n});}});
+  const dotOthers = (pid,gids,n,label,icon,gi) => {
+    gids.filter(id=>id!==pid).forEach(id=>{ if(res[id]){
+      res[id].dots+=n;
+      res[id].events.push({label:label+" (from teammate)",icon,dots:n,game:gi!=null?gi+1:null});
+      if (gi!=null) res[id].byGame[gi]=(res[id].byGame[gi]||0)+n; else res[id].manualDots+=n;
+    }});
   };
 
   const presentIds = players.filter(p=>!absentSet.has(p.id)).map(p=>p.id);
@@ -254,7 +263,7 @@ function analyzeDots(players, session) {
       groupIds.forEach(pid => {
         const o = frameOutcome(pid, fi);
         if (o !== null && isOpen(o)) {
-          dot(pid, 1, "First team open (frame "+(fi+1)+")", "🚩");
+          dot(pid, 1, "First team open (frame "+(fi+1)+")", "🚩", gi);
         }
       });
     });
@@ -290,7 +299,7 @@ function analyzeDots(players, session) {
           } else {
             // Non-strike: if we were in a streak of 5+, this person broke it
             if (inStreak) {
-              dot(pid, 1, "Broke team strike streak ("+teamStreakCount+")", "💥");
+              dot(pid, 1, "Broke team strike streak ("+teamStreakCount+")", "💥", gi);
             }
             teamStreakCount = 0;
             inStreak = false;
@@ -331,11 +340,11 @@ function analyzeDots(players, session) {
         if (isStrike(o)) {
           strikeStreak++;
           if (strikeStreak===3) {
-            dotOthers(p.id,grp,1,"Turkey by "+p.name,"🦃");
-            res[p.id].events.push({label:"Turkey! (others +1)",icon:"🦃",dots:0});
+            dotOthers(p.id,grp,1,"Turkey by "+p.name,"🦃",gi);
+            res[p.id].events.push({label:"Turkey! (others +1)",icon:"🦃",dots:0,game:gi+1});
           } else if (strikeStreak>=4) {
-            dotOthers(p.id,grp,2,strikeStreak+"-strike streak","🔥");
-            res[p.id].events.push({label:strikeStreak+"-strike streak (others +2)",icon:"🔥",dots:0});
+            dotOthers(p.id,grp,2,strikeStreak+"-strike streak","🔥",gi);
+            res[p.id].events.push({label:strikeStreak+"-strike streak (others +2)",icon:"🔥",dots:0,game:gi+1});
           }
         } else {
           strikeStreak=0;
@@ -349,9 +358,9 @@ function analyzeDots(players, session) {
           if (groupStruck && grp.length > 1) {
             // This player is hung this frame
             hangStreak++;
-            if (hangStreak===1)      dot(p.id,2,"Hung (1 frame)","🪝");
-            else if (hangStreak===2) dot(p.id,3,"Hung 2 in a row","🪝🪝");
-            else                     dot(p.id,4,"Hung "+hangStreak+" in a row","🪝🪝🪝");
+            if (hangStreak===1)      dot(p.id,2,"Hung (1 frame)","🪝",gi);
+            else if (hangStreak===2) dot(p.id,3,"Hung 2 in a row","🪝🪝",gi);
+            else                     dot(p.id,4,"Hung "+hangStreak+" in a row","🪝🪝🪝",gi);
           } else {
             hangStreak=0;
           }
@@ -361,28 +370,29 @@ function analyzeDots(players, session) {
 
         // ── Open frame dots ───────────────────────────────────────────────
         if (isOpen(o)) {
-          dot(p.id,2,"Open frame","😬");
+          dot(p.id,2,"Open frame","😬",gi);
 
           // Open 10th
-          if (is10) dot(p.id,2,"Opened 10th frame","💀");
+          if (is10) dot(p.id,2,"Opened 10th frame","💀",gi);
 
           // Miss 5-pin
-          if (o==="miss5") dot(p.id,2,"Missed 5-pin","🎯");
+          if (o==="miss5") dot(p.id,2,"Missed 5-pin","🎯",gi);
         }
 
         // ── Split logic ───────────────────────────────────────────────────
-        if (o==="split-open") dot(p.id,1,"Left a split","🎳");
+        if (o==="split-open") dot(p.id,1,"Left a split","🎳",gi);
 
         const processSplitSpare = (st) => {
           if (st==="710") {
-            res[p.id].dots=0; res[p.id].dollarDiscount=0;
-            res[p.id].events.push({label:"7-10 CONVERSION! All dots WIPED!",icon:"👑",dots:0,wipe:true});
+            res[p.id].dots=0; res[p.id].dollarDiscount=0; res[p.id].manualDots=0;
+            res[p.id].byGame=res[p.id].byGame.map(()=>0);
+            res[p.id].events.push({label:"7-10 CONVERSION! All dots WIPED!",icon:"👑",dots:0,wipe:true,game:gi+1});
           } else if (st==="large") {
-            dotOthers(p.id,grp,2,p.name+" converted large split","🎉");
-            res[p.id].events.push({label:"Large split made! (others +2)",icon:"🎉",dots:0});
+            dotOthers(p.id,grp,2,p.name+" converted large split","🎉",gi);
+            res[p.id].events.push({label:"Large split made! (others +2)",icon:"🎉",dots:0,game:gi+1});
           } else {
-            dotOthers(p.id,grp,1,p.name+" converted small split","👏");
-            res[p.id].events.push({label:"Small split made! (others +1)",icon:"👏",dots:0});
+            dotOthers(p.id,grp,1,p.name+" converted small split","👏",gi);
+            res[p.id].events.push({label:"Small split made! (others +1)",icon:"👏",dots:0,game:gi+1});
           }
         };
         if (o==="split-spare") processSplitSpare(splitType);
@@ -396,11 +406,11 @@ function analyzeDots(players, session) {
             const to = th.outcome;
             // Open on 2nd throw of 10th (only if 1st wasn't a strike — spare attempt)
             if (t===1 && isOpen(to) && !isStrike(o)) {
-              dot(p.id,2,"Open 10th frame (bonus)","💀");
-              if (to==="miss5") dot(p.id,2,"Missed 5-pin (10th)","🎯");
+              dot(p.id,2,"Open 10th frame (bonus)","💀",gi);
+              if (to==="miss5") dot(p.id,2,"Missed 5-pin (10th)","🎯",gi);
             }
             if (to==="split-spare") processSplitSpare(th.splitType);
-            if (to==="split-open") dot(p.id,1,"Left a split (10th)","🎳");
+            if (to==="split-open") dot(p.id,1,"Left a split (10th)","🎳",gi);
           }
         }
       }
@@ -410,8 +420,8 @@ function analyzeDots(players, session) {
       if (scoreInput && p.average) {
         const score = parseInt(scoreInput);
         if (!isNaN(score)) {
-          if (score < p.average) dot(p.id,1,"Missed average ("+score+" vs avg "+p.average+")","📉");
-          if (p.average - score >= 100) dot(p.id,20,"100+ under average!","🤦");
+          if (score < p.average) dot(p.id,1,"Missed average ("+score+" vs avg "+p.average+")","📉",gi);
+          if (p.average - score >= 100) dot(p.id,20,"100+ under average!","🤦",gi);
           if (score - p.average >= 100) disc(p.id,10,"100+ over average — $10 off!","🌟");
         }
       }
@@ -1144,7 +1154,7 @@ function App() {
         {tab==="dots"&&<>
           <div className="section-label mb-14" style={{color:"#555"}}>Live Dot Summary · 50¢/Dot</div>
           {players.map(p=>{
-            const r=liveDots[p.id]||{dots:0,dollarDiscount:0,events:[]};
+            const r=liveDots[p.id]||{dots:0,dollarDiscount:0,events:[],byGame:[],manualDots:0};
             const dots=Math.max(0,r.dots); const owed=owedFor(dots,r.dollarDiscount); const c=COLORS[p.colorIdx];
             return(
               <div key={p.id} className="dot-card mb-12" style={{border:`1.5px solid ${c.bg}28`}}>
@@ -1162,11 +1172,31 @@ function App() {
                     <div style={{fontSize:13,fontWeight:700,color:owed===0?"#4ECDC4":"#FFE66D"}}>{owed===0?"FREE!":"$"+owed.toFixed(2)}</div>
                   </div>
                 </div>
+                {gameCount>1&&(
+                  <div className="flex gap-6" style={{padding:"10px 14px",borderBottom:`1px solid ${c.bg}1a`}}>
+                    {Array.from({length:gameCount},(_,gi)=>{
+                      const gd=(r.byGame&&r.byGame[gi])||0;
+                      return(
+                        <div key={gi} style={{flex:1,textAlign:"center",padding:"6px 4px",borderRadius:8,background:"#080814",border:activeGame===gi?`1px solid ${c.bg}60`:"1px solid transparent"}}>
+                          <div style={{fontSize:9,color:"#444",textTransform:"uppercase",letterSpacing:1}}>Game {gi+1}</div>
+                          <div style={{fontSize:15,fontWeight:700,color:gd>0?c.bg:"#333"}}>{gd}</div>
+                        </div>
+                      );
+                    })}
+                    {r.manualDots>0&&(
+                      <div style={{flex:1,textAlign:"center",padding:"6px 4px",borderRadius:8,background:"#080814"}}>
+                        <div style={{fontSize:9,color:"#444",textTransform:"uppercase",letterSpacing:1}}>Manual</div>
+                        <div style={{fontSize:15,fontWeight:700,color:c.bg}}>{r.manualDots}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 {r.events.length>0&&(
                   <div className="dot-events">
                     {r.events.map((ev,i)=>(
                       <div key={i} className="dot-event-row">
                         <span style={{fontSize:14}}>{ev.icon}</span>
+                        {gameCount>1&&ev.game&&<span className="mono" style={{fontSize:9,color:"#333",flexShrink:0}}>G{ev.game}</span>}
                         <span style={{flex:1}}>{ev.label}</span>
                         {ev.dots>0&&<span className="mono" style={{color:"#FF6B35",fontWeight:700}}>+{ev.dots}</span>}
                         {ev.dollars&&<span className="mono" style={{color:"#4ECDC4",fontWeight:700}}>-${ev.dollars}</span>}
