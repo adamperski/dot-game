@@ -548,8 +548,14 @@ function ScoreSheet({player, frames, gameScore, onUpdate, onScoreChange, readOnl
   const t0 = (f10.throws||[])[0] || {outcome:null};
   const t1 = (f10.throws||[])[1] || {outcome:null};
   const t2 = (f10.throws||[])[2] || {outcome:null};
-  // 3rd throw only if 1st was strike or 1st+2nd = spare
-  const has3rd = isStrike(t0.outcome) || isSpare(t1.outcome) || (isStrike(t0.outcome) && isStrike(t1.outcome));
+  // A 2nd ball only exists if the 1st earned a bonus (strike or spare) --
+  // an open/split-open/miss5 1st attempt uses both its balls and ends the frame.
+  const t0Bonus = isStrike(t0.outcome) || isSpare(t0.outcome);
+  // A 3rd ball only exists if the 1st AND 2nd were both strikes (two fresh racks
+  // in a row). If the 1st was a strike but the 2nd wasn't itself a strike, the
+  // 2nd throw's outcome already used up both remaining balls -- no 3rd ball.
+  // A spare on the 1st only ever earns exactly one bonus ball (the 2nd), never a 3rd.
+  const has3rd = isStrike(t0.outcome) && isStrike(t1.outcome);
 
   return (
     <div className="sheet" style={{border:`1.5px solid ${color.bg}28`}}>
@@ -595,8 +601,8 @@ function ScoreSheet({player, frames, gameScore, onUpdate, onScoreChange, readOnl
             <div className="frame-num">10</div>
             <div className="f10-cells">
               {[t0,t1,t2].map((th,ti) => {
-                // Only show 2nd if 1st is filled; only show 3rd if eligible
-                if (ti===1 && !t0.outcome) return null;
+                // Only show 2nd if 1st earned a bonus ball; only show 3rd if eligible
+                if (ti===1 && (!t0.outcome || !t0Bonus)) return null;
                 if (ti===2 && (!t1.outcome || !has3rd)) return null;
                 const fsm = getFsm(th.outcome);
                 return (
