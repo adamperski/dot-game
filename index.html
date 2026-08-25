@@ -881,7 +881,7 @@ function App() {
     upd(s=>{
       const pg={};
       s.players.forEach(p=>{ pg[p.id]=[emptyGame()]; });
-      return {session:{weekNum:wkNum,date:wkDate,gameNum:1,absentIds:[...absentDraft],playerGames:pg,gameScores:{},manualDots:[]}};
+      return {session:{weekNum:wkNum,date:wkDate,gameNum:1,absentIds:[...absentDraft],playerGames:pg,gameScores:{},manualDots:[],payments:{}}};
     });
     setAbsentDraft(new Set());
     setWeekNumDraft(null);
@@ -926,6 +926,7 @@ function App() {
       let dr;
       try { dr=analyzeDots(s.players,s.session); } catch(e) { console.error('closeWeek analyzeDots error:', e); window.alert("Couldn't close the week — something went wrong computing dots. Your entries are still saved; please try again or reload."); return s; }
       const pBal=(p,key)=>((p.balance||{})[key]||0);
+      const paidSoFar=pid=>(s.session.payments||{})[pid]||0;
       const mkGroup=(pList,potKey)=>{
         const contribs=pList.map(p=>{
           const r=dr[p.id]||{dots:0,dollarDiscount:0};
@@ -933,11 +934,11 @@ function App() {
           const dotsOwed=owedFor(dots,r.dollarDiscount||0);
           const carryIn=pBal(p,potKey); // positive = owes from prior weeks, negative = credit
           const amountOwed=Math.max(0, dotsOwed + carryIn); // net total owed this week
-          return{playerId:p.id,name:p.name,dots,dotsOwed,carryIn,amountOwed,amountPaid:0};
+          return{playerId:p.id,name:p.name,dots,dotsOwed,carryIn,amountOwed,amountPaid:paidSoFar(p.id)};
         });
         return{potKey,label:potKey===MAIN_KEY?"Main Pot":"Side Pot ("+pList.map(p=>p.name).join(", ")+")",
           playerIds:pList.map(p=>p.id),contributions:contribs,
-          totalOwed:contribs.reduce((t,c)=>t+c.amountOwed,0),totalPaid:0};
+          totalOwed:contribs.reduce((t,c)=>t+c.amountOwed,0),totalPaid:contribs.reduce((t,c)=>t+c.amountPaid,0)};
       };
       const present=s.players.filter(p=>!abs.has(p.id));
       const absent=s.players.filter(p=>abs.has(p.id));
@@ -948,9 +949,10 @@ function App() {
         const r=dr[p.id]||{dots:0,dollarDiscount:0};
         const dotsOwed=owedFor(Math.max(0,r.dots),r.dollarDiscount||0);
         const carryIn=pBal(p,key);
-        // New balance = this week's dots owed + prior carry (payments will subtract from this)
-        const newBalance=dotsOwed + carryIn;
-        return{...p,balance:{...(p.balance||{}),[key]:newBalance}};
+        const paid=paidSoFar(p.id);
+        // New balance = this week's dots owed + prior carry, minus whatever was already paid live this week
+        const newBalance=dotsOwed + carryIn - paid;
+        return{...p,balance:{...(p.balance||{}),[key]:newBalance},paid:{...(p.paid||{}),[key]:((p.paid||{})[key]||0)+paid}};
       });
       return{players:newPlayers,session:null,weekHistory:[...s.weekHistory,{weekNum:s.session.weekNum,date:s.session.date?fmtDate(s.session.date):new Date().toLocaleDateString(),groups,dotResults:dr,gameScores:s.session.gameScores||{},playerGames:s.session.playerGames||{}}]};
     });
@@ -965,6 +967,30 @@ function App() {
       const np=s.players.map(p=>{ if(p.id!==pid)return p; return{...p,balance:{...(p.balance||{}),[potKey]:((p.balance||{})[potKey]||0)-amt},paid:{...(p.paid||{}),[potKey]:((p.paid||{})[potKey]||0)+amt}}; });
       return{weekHistory:newHistory,players:np};
     });
+  };
+
+  // Log a payment against the CURRENT (still-open) week -- doesn't require closing.
+  // Carried into weekHistory automatically once the week is eventually closed.
+  const payNow=(pid,amount)=>{
+    const amt=parseFloat(amount); if(isNaN(amt)||amt<=0)return;
+    upd(s=>{
+      if(!s.session)return s;
+      const payments={...(s.session.payments||{})};
+      payments[pid]=(payments[pid]||0)+amt;
+      return{session:{...s.session,payments}};
+    });
+  };
+
+  // Live (not-yet-closed) per-player owed/paid, for the "This Week" payments card.
+  const liveContribution=(p)=>{
+    const r=(liveDots&&liveDots[p.id])||{dots:0,dollarDiscount:0};
+    const dots=Math.max(0,r.dots);
+    const dotsOwed=owedFor(dots,r.dollarDiscount||0);
+    const potKey=absentSet.has(p.id)?("side-wk"+session.weekNum):MAIN_KEY;
+    const carryIn=(p.balance||{})[potKey]||0;
+    const amountOwed=Math.max(0,dotsOwed+carryIn);
+    const amountPaid=(session.payments||{})[p.id]||0;
+    return{playerId:p.id,name:p.name,dots,dotsOwed,carryIn,amountOwed,amountPaid};
   };
 
   const resetSeason=()=>{ if(!window.confirm("Reset entire season?"))return; setState({...initState(),players:players.map(p=>({...p,stats:{},balance:{},paid:{}}))}); };
@@ -1345,9 +1371,28 @@ function App() {
             ))}
           </div>
 
-          {/* Who owes what right now */}
+          {/* This week's live payments — no need to close the week first */}
           <div className="card mb-16">
-            <div className="section-label mb-14" style={{color:"#FF6B35"}}>Current Balances</div>
+            <div className="section-label" style={{color:"#FFE66D"}}>💵 This Week — Who Owes What</div>
+            <div className="section-sub">Wk {session.weekNum} live totals, updates as scores come in. Log payments any time.</div>
+            {presentPlayers.length>0&&(
+              <div className="mb-14">
+                <div style={{fontSize:10,fontWeight:700,color:"#FFE66D",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Main Pot</div>
+                {presentPlayers.map(p=><PayRow key={p.id} c={liveContribution(p)} players={players} onPay={amt=>payNow(p.id,amt)}/>)}
+              </div>
+            )}
+            {absentPlayers.length>0&&(
+              <div>
+                <div style={{fontSize:10,fontWeight:700,color:"#C77DFF",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Side Pot</div>
+                {absentPlayers.map(p=><PayRow key={p.id} c={liveContribution(p)} players={players} onPay={amt=>payNow(p.id,amt)}/>)}
+              </div>
+            )}
+          </div>
+
+          {/* Who owes what from prior closed weeks */}
+          <div className="card mb-16">
+            <div className="section-label" style={{color:"#FF6B35"}}>Current Balances</div>
+            <div className="section-sub">From weeks already closed — this week's live totals are above.</div>
             {players.map(p=>{
               const keys=Object.keys(p.balance||{});
               const hasAny=keys.some(k=>Math.abs((p.balance||{})[k]||0)>0.005);
