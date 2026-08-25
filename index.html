@@ -512,7 +512,7 @@ function FramePicker({frameIdx, throwNum, color, existingOutcome, onPick, onClos
 }
 
 // ─── Score Sheet ──────────────────────────────────────────────────────────────
-function ScoreSheet({player, frames, gameScore, onUpdate, onScoreChange}) {
+function ScoreSheet({player, frames, gameScore, onUpdate, onScoreChange, readOnly}) {
   const [modal, setModal] = useState(null); // {fi, throwNum}
   const color = COLORS[player.colorIdx];
 
@@ -568,8 +568,8 @@ function ScoreSheet({player, frames, gameScore, onUpdate, onScoreChange}) {
         </div>
         {/* Score input */}
         <div className="flex items-center gap-8">
-          <input type="number" placeholder="Score" value={gameScore||""} onChange={e=>onScoreChange(e.target.value)}
-            style={{width:70,padding:"5px 8px",borderRadius:8,background:"#080814",border:`1px solid ${color.bg}40`,color:"#FFE66D",fontSize:14,fontWeight:700,textAlign:"center",outline:"none"}}/>
+          <input type="number" placeholder="Score" value={gameScore||""} readOnly={readOnly} onChange={e=>!readOnly&&onScoreChange(e.target.value)}
+            style={{width:70,padding:"5px 8px",borderRadius:8,background:"#080814",border:`1px solid ${color.bg}40`,color:"#FFE66D",fontSize:14,fontWeight:700,textAlign:"center",outline:"none",cursor:readOnly?"default":"text"}}/>
         </div>
       </div>
 
@@ -580,7 +580,7 @@ function ScoreSheet({player, frames, gameScore, onUpdate, onScoreChange}) {
             return (
               <div key={fi} className="frame-col">
                 <div className="frame-num">{fi+1}</div>
-                <button className={"outcome-btn "+fsm.cls} onClick={()=>setModal({fi,throwNum:0})}>
+                <button className={"outcome-btn "+fsm.cls} onClick={()=>!readOnly&&setModal({fi,throwNum:0})} style={readOnly?{cursor:"default"}:undefined}>
                   <span className="outcome-sym" style={{color:fsm.symColor}}>{fsm.sym}</span>
                   {f.outcome==="split-spare"&&f.splitType==="710"&&<span style={{fontSize:7}}>👑</span>}
                   {f.outcome==="split-spare"&&f.splitType==="large"&&<span style={{fontSize:7}}>🎉</span>}
@@ -600,7 +600,7 @@ function ScoreSheet({player, frames, gameScore, onUpdate, onScoreChange}) {
                 if (ti===2 && (!t1.outcome || !has3rd)) return null;
                 const fsm = getFsm(th.outcome);
                 return (
-                  <button key={ti} className={"f10-cell "+fsm.cls} onClick={()=>setModal({fi:9,throwNum:ti})}>
+                  <button key={ti} className={"f10-cell "+fsm.cls} onClick={()=>!readOnly&&setModal({fi:9,throwNum:ti})} style={readOnly?{cursor:"default"}:undefined}>
                     <span className="outcome-sym" style={{color:fsm.symColor,fontSize:13}}>{fsm.sym}</span>
                     {th.outcome==="split-spare"&&th.splitType==="710"&&<span style={{fontSize:7}}>👑</span>}
                     {th.outcome==="split-spare"&&th.splitType==="large"&&<span style={{fontSize:7}}>🎉</span>}
@@ -621,6 +621,57 @@ function ScoreSheet({player, frames, gameScore, onUpdate, onScoreChange}) {
           onPick={picked=>handlePick(modal.fi, modal.throwNum, picked)}
           onClose={()=>setModal(null)}
         />
+      )}
+    </div>
+  );
+}
+
+// ─── Historical Scoresheets (read-only, for a closed week) ────────────────────
+function WeekScoresheets({wk, players}) {
+  const [open, setOpen] = useState(false);
+  const [gi, setGi] = useState(0);
+  if (!wk.playerGames || Object.keys(wk.playerGames).length===0) return null;
+
+  const gameCount = Math.max(1, ...Object.values(wk.playerGames).map(g=>(g||[]).length));
+  const nameFor = pid => {
+    for (const g of wk.groups) {
+      const c = g.contributions.find(c=>c.playerId===pid);
+      if (c) return c.name;
+    }
+    const cur = players.find(p=>p.id===pid);
+    return cur ? cur.name : "Player";
+  };
+  const colorIdxFor = pid => {
+    const cur = players.find(p=>p.id===pid);
+    return cur ? cur.colorIdx : pid%COLORS.length;
+  };
+
+  return (
+    <div className="mt-8">
+      <button onClick={()=>setOpen(o=>!o)} style={{width:"100%",padding:"8px",borderRadius:8,background:"rgba(78,205,196,0.08)",border:"1px solid rgba(78,205,196,0.25)",color:"#4ECDC4",fontWeight:700,fontSize:11,letterSpacing:1,textTransform:"uppercase"}}>
+        🎳 {open?"Hide":"View"} Scoresheets
+      </button>
+      {open && (
+        <div className="mt-8">
+          {gameCount>1 && (
+            <div className="game-tabs mb-8">
+              {Array.from({length:gameCount},(_,i)=>(
+                <button key={i} className={"game-tab"+(gi===i?" active":"")} onClick={()=>setGi(i)}>G{i+1}</button>
+              ))}
+            </div>
+          )}
+          {wk.groups.map(g=>(
+            <div key={g.potKey} className="mb-14">
+              <div style={{fontSize:10,fontWeight:700,color:g.potKey===MAIN_KEY?"#FFE66D":"#C77DFF",letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>{g.label}</div>
+              {g.playerIds.map(pid=>{
+                const frames=(wk.playerGames[pid]||[])[gi]||emptyGame();
+                const score=((wk.gameScores||{})[pid]||{})[gi]||"";
+                const fakePlayer={id:pid,name:nameFor(pid),colorIdx:colorIdxFor(pid)};
+                return <ScoreSheet key={pid} player={fakePlayer} frames={frames} gameScore={score} readOnly={true}/>;
+              })}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -789,6 +840,7 @@ function App() {
   const [showClose,setShowClose]=useState(false);
   const [activeGame,setActiveGame]=useState(0);
   const [statPlayer,setStatPlayer]=useState(null);
+  const [statWeek,setStatWeek]=useState(null);
 
   const {players,weekHistory,session}=state;
   useEffect(()=>save(state),[state]);
@@ -893,7 +945,7 @@ function App() {
         const newBalance=dotsOwed + carryIn;
         return{...p,balance:{...(p.balance||{}),[key]:newBalance}};
       });
-      return{players:newPlayers,session:null,weekHistory:[...s.weekHistory,{weekNum:s.session.weekNum,date:s.session.date?fmtDate(s.session.date):new Date().toLocaleDateString(),groups,dotResults:dr,gameScores:s.session.gameScores||{}}]};
+      return{players:newPlayers,session:null,weekHistory:[...s.weekHistory,{weekNum:s.session.weekNum,date:s.session.date?fmtDate(s.session.date):new Date().toLocaleDateString(),groups,dotResults:dr,gameScores:s.session.gameScores||{},playerGames:s.session.playerGames||{}}]};
     });
     setShowClose(false);
   };
@@ -1353,6 +1405,7 @@ function App() {
                             </div>
                           </div>
                         ))}
+                        <WeekScoresheets wk={wk} players={players}/>
                       </div>
                     )}
                   </div>
@@ -1370,33 +1423,41 @@ function App() {
 
         {/* ═══ STATS ═══ */}
         {tab==="stats"&&<>
-          <div className="section-label mb-14" style={{color:"#555"}}>Season Stats</div>
-          <div className="flex gap-6 wrap mb-16">
+          <div className="section-label mb-14" style={{color:"#555"}}>{statWeek?"Week "+statWeek+" Stats":"Season Stats"}</div>
+          <div className="flex gap-6 wrap mb-10">
             <button onClick={()=>setStatPlayer(null)} style={{padding:"6px 14px",borderRadius:20,border:"1px solid #333",background:!statPlayer?"#FF6B35":"transparent",color:!statPlayer?"#fff":"#555",fontWeight:700,fontSize:10,letterSpacing:1,textTransform:"uppercase"}}>All</button>
             {players.map(p=>{ const c=COLORS[p.colorIdx],sel=statPlayer===p.id; return<button key={p.id} onClick={()=>setStatPlayer(sel?null:p.id)} style={{padding:"6px 14px",borderRadius:20,border:`1px solid ${c.bg}50`,background:sel?c.bg:"transparent",color:sel?c.text:c.bg,fontWeight:700,fontSize:10,letterSpacing:1,textTransform:"uppercase"}}>{p.name.split(" ")[0]}</button>; })}
           </div>
+          {weekHistory.length>0&&(
+            <div className="flex gap-6 wrap mb-16">
+              <button onClick={()=>setStatWeek(null)} style={{padding:"5px 12px",borderRadius:20,border:"1px solid #333",background:!statWeek?"#4ECDC4":"transparent",color:!statWeek?"#0a0a14":"#555",fontWeight:700,fontSize:9,letterSpacing:1,textTransform:"uppercase"}}>All Weeks</button>
+              {[...weekHistory].sort((a,b)=>b.weekNum-a.weekNum).map(wk=>{ const sel=statWeek===wk.weekNum; return<button key={wk.weekNum} onClick={()=>setStatWeek(sel?null:wk.weekNum)} style={{padding:"5px 12px",borderRadius:20,border:"1px solid #2a2a4e",background:sel?"#4ECDC4":"transparent",color:sel?"#0a0a14":"#666",fontWeight:700,fontSize:9,letterSpacing:1,textTransform:"uppercase"}}>Wk {wk.weekNum}</button>; })}
+            </div>
+          )}
 
           {weekHistory.length===0?(
             <div className="empty-state"><div className="empty-icon">📊</div><div className="empty-text">No data yet</div></div>
           ):(<>
             {(()=>{
               const sps=statPlayer?players.filter(p=>p.id===statPlayer):players;
-              const totalPaid=p=>Object.values(p.paid||{}).reduce((t,v)=>t+v,0);
+              const wh=statWeek?weekHistory.filter(wk=>wk.weekNum===statWeek):weekHistory;
+              const totalPaid=p=>wh.reduce((t,wk)=>t+wk.groups.reduce((s,g)=>{ const c=g.contributions.find(c=>c.playerId===p.id); return s+(c?c.amountPaid||0:0); },0),0);
+              const totalPaidByPot=(p,potKey)=>wh.reduce((t,wk)=>{ const g=wk.groups.find(g=>g.potKey===potKey); if(!g)return t; const c=g.contributions.find(c=>c.playerId===p.id); return t+(c?c.amountPaid||0:0); },0);
               const agg={};
               sps.forEach(p=>{ agg[p.id]={opens:0,splits:0,smallPicks:0,largePicks:0,sevenTen:0,turkeys:0,streaks:0,hung:0,miss5:0,name:p.name,colorIdx:p.colorIdx,paid:totalPaid(p)}; });
-              weekHistory.forEach(wk=>{ if(!wk.dotResults)return; Object.entries(wk.dotResults).forEach(([pid,dr])=>{ const a=agg[parseInt(pid)];if(!a)return; (dr.events||[]).forEach(ev=>{ if(ev.icon==="😬"&&!ev.label.includes("from"))a.opens++; if(ev.icon==="🎳"&&!ev.label.includes("from"))a.splits++; if(ev.icon==="👏"&&!ev.label.includes("from"))a.smallPicks++; if(ev.icon==="🎉"&&!ev.label.includes("from"))a.largePicks++; if(ev.icon==="👑"&&!ev.label.includes("from"))a.sevenTen++; if(ev.icon==="🦃"&&!ev.label.includes("from"))a.turkeys++; if(ev.icon==="🔥"&&!ev.label.includes("from"))a.streaks++; if(ev.icon==="🪝"&&!ev.label.includes("from"))a.hung++; if(ev.icon==="🎯"&&!ev.label.includes("from"))a.miss5++; }); }); });
+              wh.forEach(wk=>{ if(!wk.dotResults)return; Object.entries(wk.dotResults).forEach(([pid,dr])=>{ const a=agg[parseInt(pid)];if(!a)return; (dr.events||[]).forEach(ev=>{ if(ev.icon==="😬"&&!ev.label.includes("from"))a.opens++; if(ev.icon==="🎳"&&!ev.label.includes("from"))a.splits++; if(ev.icon==="👏"&&!ev.label.includes("from"))a.smallPicks++; if(ev.icon==="🎉"&&!ev.label.includes("from"))a.largePicks++; if(ev.icon==="👑"&&!ev.label.includes("from"))a.sevenTen++; if(ev.icon==="🦃"&&!ev.label.includes("from"))a.turkeys++; if(ev.icon==="🔥"&&!ev.label.includes("from"))a.streaks++; if(ev.icon==="🪝"&&!ev.label.includes("from"))a.hung++; if(ev.icon==="🎯"&&!ev.label.includes("from"))a.miss5++; }); }); });
               const entries=Object.values(agg);
 
               // Scores data for series averages
               const scoreStats={};
               sps.forEach(p=>{ scoreStats[p.id]={games:[],name:p.name,colorIdx:p.colorIdx}; });
-              weekHistory.forEach(wk=>{ if(!wk.gameScores)return; Object.entries(wk.gameScores).forEach(([pid,gs])=>{ const ss=scoreStats[parseInt(pid)]; if(!ss)return; Object.values(gs).forEach(v=>{ const n=parseInt(v); if(!isNaN(n)&&n>0)ss.games.push(n); }); }); });
+              wh.forEach(wk=>{ if(!wk.gameScores)return; Object.entries(wk.gameScores).forEach(([pid,gs])=>{ const ss=scoreStats[parseInt(pid)]; if(!ss)return; Object.values(gs).forEach(v=>{ const n=parseInt(v); if(!isNaN(n)&&n>0)ss.games.push(n); }); }); });
 
               return(<>
-                {/* Season paid */}
+                {/* Paid */}
                 <div className="card mb-14">
-                  <div className="section-label mb-12" style={{color:"#FFE66D"}}>💸 Total Paid (Season)</div>
-                  {[...sps].sort((a,b)=>totalPaid(b)-totalPaid(a)).map((p,i)=>{ const c=COLORS[p.colorIdx],tot=totalPaid(p),side=Object.entries(p.paid||{}).filter(([k])=>k!==MAIN_KEY).reduce((t,[,v])=>t+v,0); return(
+                  <div className="section-label mb-12" style={{color:"#FFE66D"}}>💸 Total Paid ({statWeek?"Week "+statWeek:"Season"})</div>
+                  {[...sps].sort((a,b)=>totalPaid(b)-totalPaid(a)).map((p,i)=>{ const c=COLORS[p.colorIdx],tot=totalPaid(p),side=totalPaid(p)-totalPaidByPot(p,MAIN_KEY); return(
                     <div key={p.id} className="flex items-center gap-10 mb-8">
                       <span style={{fontSize:16,width:24}}>{!statPlayer&&(i===0?"🥇":i===1?"🥈":i===2?"🥉":"")}</span>
                       <div style={{width:8,height:8,borderRadius:"50%",background:c.bg,flexShrink:0}}/>
