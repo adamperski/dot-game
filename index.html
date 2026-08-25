@@ -360,8 +360,9 @@ function analyzeDots(players, session) {
         trackStrikeStreak(isStrike(o));
 
         // ── Hung logic ────────────────────────────────────────────────────
-        // Hung = only this player didn't strike, everyone else in group did
-        // Spares do NOT trigger hung
+        // Hung = only this player didn't strike, everyone else in group did.
+        // Anything other than a strike counts -- spare, open, split, doesn't
+        // matter what it was, only that everyone else struck and this player didn't.
         if (!isStrike(o)) {
           const groupStruck = grp.filter(id=>id!==p.id).every(id=>isStrike(frameOutcome(id, fi)));
           if (groupStruck && grp.length > 1) {
