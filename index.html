@@ -186,6 +186,9 @@ const potLabel = (wh,key) => {
   return w ? "Side Pot · Wk "+w.weekNum : "Side Pot";
 };
 
+const todayISO = () => { const d=new Date(); const p=n=>String(n).padStart(2,"0"); return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate()); };
+const fmtDate = iso => { try { return new Date(iso+"T00:00:00").toLocaleDateString(); } catch { return iso; } };
+
 // ─── Dot Analysis ─────────────────────────────────────────────────────────────
 function analyzeDots(players, session) {
   const absentSet = new Set(session.absentIds||[]);
@@ -780,6 +783,8 @@ function App() {
   const [newRegName,setNewRegName]=useState("");
   const [newRegAvg,setNewRegAvg]=useState("");
   const [absentDraft,setAbsentDraft]=useState(new Set());
+  const [weekNumDraft,setWeekNumDraft]=useState(null); // null = use auto default
+  const [dateDraft,setDateDraft]=useState(null); // null = use auto default (today)
   const [expandedWeek,setExpandedWeek]=useState(null);
   const [showClose,setShowClose]=useState(false);
   const [activeGame,setActiveGame]=useState(0);
@@ -792,7 +797,9 @@ function App() {
   const allKeys=allPotKeys(weekHistory);
   const mainTotal=potTotal(weekHistory,MAIN_KEY);
   const sideTotals=allKeys.filter(k=>k!==MAIN_KEY).map(k=>({key:k,total:potTotal(weekHistory,k)}));
-  const seasonNum=session?session.weekNum:(weekHistory.length>0?weekHistory[weekHistory.length-1].weekNum+1:1);
+  const autoWeekNum=weekHistory.length>0?weekHistory[weekHistory.length-1].weekNum+1:1;
+  const effectiveWeekNum=weekNumDraft!==null&&weekNumDraft!==""?parseInt(weekNumDraft):autoWeekNum;
+  const effectiveDate=dateDraft!==null&&dateDraft!==""?dateDraft:todayISO();
   const absentSet=new Set((session||{}).absentIds||[]);
   const presentPlayers=players.filter(p=>!absentSet.has(p.id));
   const absentPlayers =players.filter(p=> absentSet.has(p.id));
@@ -810,13 +817,16 @@ function App() {
   const startSession=()=>{
     if(!players.length)return;
     if(missingAvg.length>0){ window.alert("Set an average for everyone before starting the week:\n"+missingAvg.map(p=>"• "+p.name).join("\n")); return; }
+    const wkNum=effectiveWeekNum;
+    const wkDate=effectiveDate;
     upd(s=>{
-      const wkNum=s.weekHistory.length>0?s.weekHistory[s.weekHistory.length-1].weekNum+1:1;
       const pg={};
       s.players.forEach(p=>{ pg[p.id]=[emptyGame()]; });
-      return {session:{weekNum:wkNum,gameNum:1,absentIds:[...absentDraft],playerGames:pg,gameScores:{},manualDots:[]}};
+      return {session:{weekNum:wkNum,date:wkDate,gameNum:1,absentIds:[...absentDraft],playerGames:pg,gameScores:{},manualDots:[]}};
     });
     setAbsentDraft(new Set());
+    setWeekNumDraft(null);
+    setDateDraft(null);
     setActiveGame(0);
     setTab("game");
   };
@@ -883,7 +893,7 @@ function App() {
         const newBalance=dotsOwed + carryIn;
         return{...p,balance:{...(p.balance||{}),[key]:newBalance}};
       });
-      return{players:newPlayers,session:null,weekHistory:[...s.weekHistory,{weekNum:s.session.weekNum,date:new Date().toLocaleDateString(),groups,dotResults:dr,gameScores:s.session.gameScores||{}}]};
+      return{players:newPlayers,session:null,weekHistory:[...s.weekHistory,{weekNum:s.session.weekNum,date:s.session.date?fmtDate(s.session.date):new Date().toLocaleDateString(),groups,dotResults:dr,gameScores:s.session.gameScores||{}}]};
     });
     setShowClose(false);
   };
@@ -945,9 +955,24 @@ function App() {
     <div id="app" style={{paddingBottom:80}}>
       <div style={{background:"linear-gradient(135deg,#0f0f24,#14102a)",borderBottom:"1px solid rgba(255,255,255,0.06)",padding:"20px 20px 16px"}}>
         <div style={{fontSize:26,fontWeight:700,color:"#FF6B35",letterSpacing:2,textTransform:"uppercase"}}>🎳 Dot Game</div>
-        <div className="mono" style={{fontSize:10,color:"#444",letterSpacing:3,marginTop:2,textTransform:"uppercase"}}>Week {seasonNum} · Session Setup</div>
+        <div className="mono" style={{fontSize:10,color:"#444",letterSpacing:3,marginTop:2,textTransform:"uppercase"}}>Week {effectiveWeekNum} · Session Setup</div>
       </div>
       <div style={{padding:"20px 16px"}}>
+        <div className="card">
+          <div className="section-label" style={{color:"#FFE66D"}}>Week Info</div>
+          <div className="section-sub">Defaults to the next week number and today's date — change if needed.</div>
+          <div className="flex gap-8">
+            <div className="flex-1">
+              <div style={{fontSize:10,color:"#444",marginBottom:4,textTransform:"uppercase",letterSpacing:1}}>Week #</div>
+              <input className="inp" type="number" style={{width:"100%"}} value={weekNumDraft!==null?weekNumDraft:autoWeekNum} onChange={e=>setWeekNumDraft(e.target.value)}/>
+            </div>
+            <div className="flex-1">
+              <div style={{fontSize:10,color:"#444",marginBottom:4,textTransform:"uppercase",letterSpacing:1}}>Date</div>
+              <input className="inp" type="date" style={{width:"100%"}} value={dateDraft!==null?dateDraft:todayISO()} onChange={e=>setDateDraft(e.target.value)}/>
+            </div>
+          </div>
+        </div>
+
         <div className="card">
           <div className="section-label" style={{color:"#4ECDC4"}}>Regular Lineup</div>
           <div className="section-sub">Tap ✏️ to edit name or average. Tap ✕ to remove.</div>
@@ -1034,7 +1059,7 @@ function App() {
             background:missingAvg.length>0?"#20202e":"linear-gradient(135deg,#FF6B35,#e55520)",
             border:"none",color:missingAvg.length>0?"#555":"#fff",fontWeight:700,fontSize:18,letterSpacing:2,textTransform:"uppercase",
             boxShadow:missingAvg.length>0?"none":"0 4px 24px rgba(255,107,53,0.25)",marginBottom:12,cursor:missingAvg.length>0?"not-allowed":"pointer"}}>
-          {missingAvg.length>0?"🔒 Set Averages To Start":"🎳 Start Week "+seasonNum}
+          {missingAvg.length>0?"🔒 Set Averages To Start":"🎳 Start Week "+effectiveWeekNum}
         </button>
         {weekHistory.length>0&&(
           <button onClick={resetSeason} style={{width:"100%",padding:"10px",borderRadius:10,background:"transparent",border:"1px solid rgba(255,68,68,0.16)",color:"#ff4444",fontSize:11,fontWeight:700}}>🗑 Reset Entire Season</button>
