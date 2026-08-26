@@ -450,15 +450,14 @@ function analyzeDots(players, session) {
         const score = parseInt(scoreInput);
         if (!isNaN(score)) {
           if (score < p.average) dot(p.id,1,"Missed average ("+score+" vs avg "+p.average+")","📉",gi);
-          if (score - p.average >= 100) disc(p.id,10,"100+ over average — $10 off!","🌟");
         }
       }
     });
   }
 
-  // ── Series-based check: 100+ under average across the whole series ─────
+  // ── Series-based checks: 100+ under/over average across the whole series ──
   // (Sum of every game bowled this session vs. average × games bowled --
-  // not a single bad game, a bad night overall.)
+  // a bad/great night overall, not a single game.)
   players.forEach(p => {
     if (!p.average) return;
     const gs = (session.gameScores||{})[p.id]||{};
@@ -466,9 +465,12 @@ function analyzeDots(players, session) {
     if (entries.length === 0) return;
     const seriesTotal = entries.reduce((t,[,v])=>t+v,0);
     const expected = p.average * entries.length;
+    const lastGi = Math.max(...entries.map(([g])=>g));
     if (expected - seriesTotal >= 100) {
-      const lastGi = Math.max(...entries.map(([g])=>g));
       dot(p.id,20,"100+ under average for the series ("+seriesTotal+" vs "+expected+")","🤦",lastGi);
+    }
+    if (seriesTotal - expected >= 100) {
+      disc(p.id,10,"100+ over average for the series ("+seriesTotal+" vs "+expected+") — $10 off!","🌟");
     }
   });
 
@@ -1697,7 +1699,7 @@ function App() {
               {icon:"🎉",label:"Large Split — Converted",desc:"Others each get 2 dots",val:"others +2"},
               {icon:"🦃",label:"Turkey (3 strikes)",desc:"Others each get 1 dot",val:"others +1"},
               {icon:"🔥",label:"4+ Strike Streak",desc:"Others get 2 dots per additional frame",val:"others +2"},
-              {icon:"🌟",label:"100+ Over Average",desc:"Scored 100+ pins over your average",val:"-$10"},
+              {icon:"🌟",label:"100+ Over Average",desc:"Series total 100+ pins over average × games bowled (a great night, not one great game)",val:"-$10"},
               {icon:"👑",label:"7-10 Conversion",desc:"Wipes ALL your dots for the night",val:"WIPE ALL"},
             ].map(ev=>(
               <div key={ev.label} className="flex items-start gap-10" style={{background:"#0f0f22",borderRadius:10,padding:"10px 14px",border:"1px solid rgba(255,255,255,0.03)",marginBottom:5}}>
