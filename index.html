@@ -1167,6 +1167,61 @@ function App() {
     });
   };
 
+  // Corrective tool: move ONE closed week's entire record for a player (dots,
+  // dollars owed/paid, pot membership, scoresheet) from one playerId to
+  // another -- for fixing a specific week that got attributed to the wrong
+  // current roster record (e.g. two players' names got swapped between
+  // weeks, splitting one real person's history across two ids). Only
+  // touches the single named week; every other week is untouched.
+  // If newPid ALSO has data in that same week (the common case -- both
+  // people bowled that night), this SWAPS the two records instead of
+  // overwriting one, so neither week ever ends up with two rows under the
+  // same id (which would silently drop one of them from every total).
+  const reassignWeekPlayer=(wkNum,oldPid,newPid)=>{
+    const newPlayer=players.find(p=>p.id===newPid);
+    const oldPlayerNow=players.find(p=>p.id===oldPid); // whoever currently holds oldPid, if anyone
+    if(!newPlayer)return;
+    upd(s=>{
+      const swapKeyed=obj=>{
+        if(!obj||!(String(oldPid) in obj))return obj;
+        const n={...obj};
+        const hasNew=String(newPid) in obj;
+        const oldVal=n[oldPid];
+        if(hasNew){ const newVal=n[newPid]; n[oldPid]=newVal; n[newPid]=oldVal; }
+        else { delete n[oldPid]; n[newPid]=oldVal; }
+        return n;
+      };
+      const newHistory=s.weekHistory.map(wk=>{
+        if(wk.weekNum!==wkNum)return wk;
+        return{
+          ...wk,
+          groups:wk.groups.map(g=>{
+            const hasOld=g.contributions.some(c=>c.playerId===oldPid);
+            if(!hasOld)return g;
+            const hasNewAlready=g.contributions.some(c=>c.playerId===newPid);
+            return{
+              ...g,
+              playerIds:g.playerIds.map(pid=>{
+                if(pid===oldPid)return newPid;
+                if(hasNewAlready&&pid===newPid)return oldPid;
+                return pid;
+              }),
+              contributions:g.contributions.map(c=>{
+                if(c.playerId===oldPid)return{...c,playerId:newPid,name:newPlayer.name};
+                if(hasNewAlready&&c.playerId===newPid)return{...c,playerId:oldPid,name:oldPlayerNow?oldPlayerNow.name:c.name};
+                return c;
+              })
+            };
+          }),
+          dotResults:swapKeyed(wk.dotResults),
+          gameScores:swapKeyed(wk.gameScores),
+          playerGames:swapKeyed(wk.playerGames)
+        };
+      });
+      return{weekHistory:newHistory};
+    });
+  };
+
   // Log a payment against the CURRENT (still-open) week -- doesn't require closing.
   // Carried into weekHistory automatically once the week is eventually closed.
   const payNow=(pid,amount)=>{
@@ -1373,12 +1428,30 @@ function App() {
         {showDebug&&(
           <div className="card" style={{marginTop:8}}>
             <div className="section-label mb-8" style={{color:"#4ECDC4"}}>Raw Ledger</div>
-            <div className="section-sub">One line per player per closed week -- exactly what's stored, for troubleshooting a balance that looks wrong.</div>
-            <pre style={{fontSize:10,color:"#aaa",whiteSpace:"pre-wrap",background:"#080814",padding:10,borderRadius:8,overflowX:"auto"}}>
-{weekHistory.map(wk=>wk.groups.map(g=>g.contributions.map(c=>
-  "wk"+wk.weekNum+" ["+g.potKey+"] "+c.name+" (id "+c.playerId+"): "+c.dots+" dots, dotsOwed=$"+(c.dotsOwed||0).toFixed(2)+", amountPaid=$"+(c.amountPaid||0).toFixed(2)
-).join("\n")).join("\n")).join("\n")}
-            </pre>
+            <div className="section-sub">One row per player per closed week -- exactly what's stored. A red row means the id that week's data is filed under is currently a DIFFERENT player -- use Reassign to move that one week's dots/dollars/scoresheet onto the correct current player, without touching any other week.</div>
+            {weekHistory.map(wk=>wk.groups.map(g=>g.contributions.map(c=>{
+              const current=players.find(p=>p.id===c.playerId);
+              const mismatched=!current||current.name!==c.name;
+              return(
+                <div key={wk.weekNum+"-"+g.potKey+"-"+c.playerId} style={{padding:"8px 10px",marginBottom:6,borderRadius:8,background:mismatched?"rgba(255,68,68,0.07)":"#080814",border:mismatched?"1px solid rgba(255,68,68,0.3)":"1px solid #1a1a2e"}}>
+                  <div style={{fontSize:11,color:"#ccc",marginBottom:mismatched?6:0}}>
+                    Wk{wk.weekNum} [{g.potKey}] <b>{c.name}</b> (id {c.playerId}): {c.dots} dots, owed ${(c.dotsOwed||0).toFixed(2)}, paid ${(c.amountPaid||0).toFixed(2)}
+                  </div>
+                  {mismatched&&(
+                    <>
+                      <div style={{fontSize:10,color:"#ff4444",marginBottom:6}}>⚠ id {c.playerId} is currently {current?current.name:"not in the roster"} -- this week's data doesn't belong to them.</div>
+                      <div style={{display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
+                        <span style={{fontSize:10,color:"#555"}}>Move this week's data to:</span>
+                        {players.filter(p=>p.id!==c.playerId).map(p=>(
+                          <button key={p.id} onClick={()=>{ if(window.confirm("Move Week "+wk.weekNum+"'s "+c.dots+" dots / $"+(c.dotsOwed||0).toFixed(2)+" owed / $"+(c.amountPaid||0).toFixed(2)+" paid from id "+c.playerId+" onto "+p.name+"? This only changes this one week."))reassignWeekPlayer(wk.weekNum,c.playerId,p.id); }}
+                            style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,background:"rgba(78,205,196,0.1)",border:"1px solid rgba(78,205,196,0.35)",color:"#4ECDC4"}}>{p.name}</button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })))}
             <div className="section-sub" style={{marginTop:8}}>Current roster player ids:</div>
             <pre style={{fontSize:10,color:"#aaa",whiteSpace:"pre-wrap",background:"#080814",padding:10,borderRadius:8,overflowX:"auto"}}>
 {players.map(p=>p.name+": id "+p.id).join("\n")}
