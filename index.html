@@ -976,6 +976,34 @@ function App() {
   const gameCount=session&&players.length>0?((session.playerGames[players[0].id]||[emptyGame()]).length):1;
   const missingAvg=players.filter(p=>p.average==null);
 
+  // Players who were removed from the roster (✕) but still appear in closed
+  // weekHistory. Their week-by-week data was never touched -- only their
+  // running balance/paid (which lives on the player record) went with them.
+  // Reconstruct that from weekHistory so "Restore" reconnects them properly.
+  const removedPlayers = (() => {
+    const currentIds = new Set(players.map(p=>p.id));
+    const found = new Map();
+    weekHistory.forEach(wk=>{
+      wk.groups.forEach(g=>{
+        g.contributions.forEach(c=>{
+          if (currentIds.has(c.playerId)) return;
+          if (!found.has(c.playerId)) found.set(c.playerId, {id:c.playerId, name:c.name, byPot:{}});
+          const rec = found.get(c.playerId);
+          rec.name = c.name;
+          const bp = rec.byPot[g.potKey] || (rec.byPot[g.potKey] = {paidTotal:0, lastWeek:-1, lastBalance:0});
+          bp.paidTotal += (c.amountPaid||0);
+          if (wk.weekNum >= bp.lastWeek) { bp.lastWeek = wk.weekNum; bp.lastBalance = (c.amountOwed||0) - (c.amountPaid||0); }
+        });
+      });
+    });
+    return [...found.values()];
+  })();
+  const restorePlayer = (rec) => {
+    const balance={}, paid={};
+    Object.entries(rec.byPot).forEach(([key,bp])=>{ balance[key]=bp.lastBalance; paid[key]=bp.paidTotal; });
+    upd(s=>({players:[...s.players,{id:rec.id,name:rec.name,average:null,colorIdx:s.players.length%COLORS.length,isRegular:true,stats:{},balance,paid}]}));
+  };
+
   // ── Roster ────────────────────────────────────────────────────────────────
   const updateAvg=(id,val)=>{ const avg=val===""?null:parseInt(val); upd(s=>({players:s.players.map(p=>p.id===id?{...p,average:isNaN(avg)?null:avg}:p)})); setEditAvg(prev=>{const n={...prev};delete n[id];return n;}); };
   const saveEditName=(id)=>{ const name=(editName[id]||"").trim(); if(name)upd(s=>({players:s.players.map(p=>p.id===id?{...p,name}:p)})); setEditName(prev=>{const n={...prev};delete n[id];return n;}); };
@@ -1155,6 +1183,25 @@ function App() {
         <div className="mono" style={{fontSize:10,color:"#444",letterSpacing:3,marginTop:2,textTransform:"uppercase"}}>Week {effectiveWeekNum} · Session Setup</div>
       </div>
       <div style={{padding:"20px 16px"}}>
+
+        {removedPlayers.length>0&&(
+          <div className="card" style={{border:"1px solid rgba(255,107,53,0.3)",background:"rgba(255,107,53,0.05)"}}>
+            <div style={{fontWeight:700,fontSize:11,color:"#FF6B35",letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>⚠️ Removed Players Found</div>
+            <div style={{fontSize:12,color:"#ccc",marginBottom:10}}>These were removed from the lineup (✕) but still have week history. Restore reconnects them to their past weeks and running balance — you'll just need to re-set their average.</div>
+            <div className="flex gap-8 wrap">
+              {removedPlayers.map(rec=>{
+                const owed=Object.values(rec.byPot).reduce((t,bp)=>t+Math.max(0,bp.lastBalance),0);
+                return (
+                  <button key={rec.id} onClick={()=>restorePlayer(rec)} style={{display:"flex",flexDirection:"column",alignItems:"flex-start",gap:2,padding:"8px 14px",borderRadius:10,background:"rgba(255,107,53,0.1)",border:"1px solid rgba(255,107,53,0.35)",color:"#FF6B35"}}>
+                    <span style={{fontWeight:700,fontSize:13}}>↩️ Restore {rec.name}</span>
+                    {owed>0.005&&<span style={{fontSize:10,color:"#ffb38a"}}>${owed.toFixed(2)} balance carries back too</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="card">
           <div className="section-label" style={{color:"#FFE66D"}}>Week Info</div>
           <div className="section-sub">Defaults to the next week number and today's date — change if needed.</div>
