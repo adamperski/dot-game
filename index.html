@@ -211,6 +211,42 @@ const fairPayoutSplit = wh => {
   return byPlayer;
 };
 
+// A player's running balance for a pot is always computed FRESH from the
+// season ledger (weekHistory) -- sum of every week's dot-charge (dotsOwed,
+// which is immutable once a week closes) minus every payment ever logged
+// against that pot (amountPaid, whether logged live before close or
+// retroactively via Week History afterward). This is deliberately NOT a
+// cached/carried-forward snapshot: a snapshot taken at one week's close can
+// go stale the moment a later payment is logged against an OLDER week (e.g.
+// paying off the rest of Week 1 after Week 2 is already closed) -- the
+// snapshot has no way to hear about that. Recomputing from the ledger every
+// time means it's always correct regardless of payment order or timing.
+const totalOwedByPot = (wh, pid, potKey) => wh.reduce((t,wk)=>{
+  const g = wk.groups.find(g=>g.potKey===potKey);
+  const c = g && g.contributions.find(c=>c.playerId===pid);
+  return t + (c ? c.dotsOwed : 0);
+}, 0);
+const totalPaidByPot = (wh, pid, potKey) => wh.reduce((t,wk)=>{
+  const g = wk.groups.find(g=>g.potKey===potKey);
+  const c = g && g.contributions.find(c=>c.playerId===pid);
+  return t + (c ? (c.amountPaid||0) : 0);
+}, 0);
+const currentBalance = (wh, pid, potKey) => totalOwedByPot(wh,pid,potKey) - totalPaidByPot(wh,pid,potKey);
+const allPotKeysForPlayer = (wh, pid) => { const s=new Set(); wh.forEach(wk=>wk.groups.forEach(g=>{ if(g.contributions.some(c=>c.playerId===pid)) s.add(g.potKey); })); return [...s]; };
+// A group's contributions with carryIn/amountOwed recomputed live (as of
+// right now) instead of trusting the frozen values stored at that week's
+// close -- so a retroactive payment on an earlier week immediately corrects
+// every later week's display too, not just going-forward balances.
+const liveGroup = (wh, wk, g) => {
+  const priorWh = wh.filter(w=>w.weekNum < wk.weekNum);
+  const contributions = g.contributions.map(c=>{
+    const carryIn = currentBalance(priorWh, c.playerId, g.potKey);
+    const amountOwed = Math.max(0, c.dotsOwed + carryIn);
+    return {...c, carryIn, amountOwed};
+  });
+  return {...g, contributions, totalOwed: contributions.reduce((t,c)=>t+c.amountOwed,0)};
+};
+
 // ─── Dot Analysis ─────────────────────────────────────────────────────────────
 function analyzeDots(players, session) {
   const absentSet = new Set(session.absentIds||[]);
@@ -714,25 +750,29 @@ function WeekHistoryCard({weekHistory, players, expandedWeek, setExpandedWeek, r
     <div className="card">
       <div className="section-label mb-14" style={{color:"#4ECDC4"}}>Week History & Payments</div>
       {[...weekHistory].reverse().map(wk=>{
-        const isOpen=expandedWeek===wk.weekNum; const settled=wk.groups.every(g=>Math.abs(g.totalOwed-(g.totalPaid||0))<0.01);
+        const isOpen=expandedWeek===wk.weekNum;
+        // Recompute carryIn/amountOwed live so a retroactive payment on an
+        // earlier week is reflected here immediately, not just going forward.
+        const groups=wk.groups.map(g=>liveGroup(weekHistory,wk,g));
+        const settled=groups.every(g=>Math.abs(g.totalOwed-(g.totalPaid||0))<0.01);
         return(
           <div key={wk.weekNum} className="week-row">
             <button className="week-header" onClick={()=>setExpandedWeek(isOpen?null:wk.weekNum)}>
               <div className="flex items-center gap-10 wrap">
                 <span style={{fontWeight:700,color:"#4ECDC4",fontSize:13}}>Week {wk.weekNum}</span>
                 <span className="mono" style={{fontSize:11,color:"#444"}}>{wk.date}</span>
-                {wk.groups.some(g=>g.potKey!==MAIN_KEY)&&<span style={{fontSize:9,fontWeight:700,color:"#C77DFF",background:"rgba(199,125,255,0.1)",padding:"1px 6px",borderRadius:8}}>Side Pot</span>}
+                {groups.some(g=>g.potKey!==MAIN_KEY)&&<span style={{fontSize:9,fontWeight:700,color:"#C77DFF",background:"rgba(199,125,255,0.1)",padding:"1px 6px",borderRadius:8}}>Side Pot</span>}
                 <span style={{fontSize:9,fontWeight:700,color:settled?"#06D6A0":"#FF6B35",background:settled?"rgba(6,214,160,0.1)":"rgba(255,107,53,0.1)",padding:"1px 6px",borderRadius:8}}>{settled?"✓ Settled":"Pending"}</span>
               </div>
               <div className="flex gap-8 items-center">
-                <div className="text-right">{wk.groups.map(g=><div key={g.potKey} style={{fontSize:11,fontWeight:700,color:g.potKey===MAIN_KEY?"#FFE66D":"#C77DFF"}}>${(g.totalPaid||0).toFixed(2)}<span style={{color:"#333",fontSize:9}}>/${g.totalOwed.toFixed(2)}</span></div>)}</div>
+                <div className="text-right">{groups.map(g=><div key={g.potKey} style={{fontSize:11,fontWeight:700,color:g.potKey===MAIN_KEY?"#FFE66D":"#C77DFF"}}>${(g.totalPaid||0).toFixed(2)}<span style={{color:"#333",fontSize:9}}>/${g.totalOwed.toFixed(2)}</span></div>)}</div>
                 <span style={{color:"#444",fontSize:12}}>{isOpen?"▲":"▼"}</span>
               </div>
             </button>
             {isOpen&&(
               <div className="week-body">
-                {wk.groups.map((g,gi)=>(
-                  <div key={g.potKey} style={{marginBottom:gi<wk.groups.length-1?16:0}}>
+                {groups.map((g,gi)=>(
+                  <div key={g.potKey} style={{marginBottom:gi<groups.length-1?16:0}}>
                     <div style={{fontWeight:700,fontSize:10,color:g.potKey===MAIN_KEY?"#FFE66D":"#C77DFF",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>{g.label}</div>
                     {g.contributions.map(c=><PayRow key={c.playerId} c={c} players={players} onPay={amt=>recPay(wk.weekNum,g.potKey,c.playerId,amt)}/>)}
                     <div className="flex justify-between" style={{padding:"6px 10px",background:"#080814",borderRadius:8,fontSize:12}}>
@@ -855,10 +895,13 @@ function exportToExcel(players, weekHistory) {
     [],
     ["Player","Avg","Weeks Played","Total Dots","Total Paid","Main Pot Paid","Side Pot Paid","Balance","Fair Payout (Main)","Fair Payout (Side)","Fair Payout (Total)"],
     ...players.map(p=>{
-      const totalPaid = Object.values(p.paid||{}).reduce((t,v)=>t+v,0);
-      const mainPaid = (p.paid||{})[MAIN_KEY]||0;
+      // Paid/balance always recomputed from weekHistory, never the cached
+      // p.paid/p.balance -- see currentBalance's comment for why.
+      const potKeys = allPotKeysForPlayer(weekHistory,p.id);
+      const mainPaid = totalPaidByPot(weekHistory,p.id,MAIN_KEY);
+      const totalPaid = potKeys.reduce((t,k)=>t+totalPaidByPot(weekHistory,p.id,k),0);
       const sidePaid = totalPaid - mainPaid;
-      const balance = Object.values(p.balance||{}).reduce((t,v)=>t+v,0);
+      const balance = potKeys.reduce((t,k)=>t+currentBalance(weekHistory,p.id,k),0);
       const weeksPlayed = weekHistory.filter(wk=>wk.groups.some(g=>g.contributions.some(c=>c.playerId===p.id))).length;
       const totalDots = weekHistory.reduce((t,wk)=>{
         const c = wk.groups.flatMap(g=>g.contributions).find(c=>c.playerId===p.id);
@@ -977,9 +1020,9 @@ function App() {
   const missingAvg=players.filter(p=>p.average==null);
 
   // Players who were removed from the roster (✕) but still appear in closed
-  // weekHistory. Their week-by-week data was never touched -- only their
-  // running balance/paid (which lives on the player record) went with them.
-  // Reconstruct that from weekHistory so "Restore" reconnects them properly.
+  // weekHistory. Their week-by-week data was never touched -- their balance
+  // owed/paid is always recomputed fresh from weekHistory (currentBalance),
+  // so it's correct regardless of when they were removed or restored.
   const removedPlayers = (() => {
     const currentIds = new Set(players.map(p=>p.id));
     const found = new Map();
@@ -987,21 +1030,15 @@ function App() {
       wk.groups.forEach(g=>{
         g.contributions.forEach(c=>{
           if (currentIds.has(c.playerId)) return;
-          if (!found.has(c.playerId)) found.set(c.playerId, {id:c.playerId, name:c.name, byPot:{}});
-          const rec = found.get(c.playerId);
-          rec.name = c.name;
-          const bp = rec.byPot[g.potKey] || (rec.byPot[g.potKey] = {paidTotal:0, lastWeek:-1, lastBalance:0});
-          bp.paidTotal += (c.amountPaid||0);
-          if (wk.weekNum >= bp.lastWeek) { bp.lastWeek = wk.weekNum; bp.lastBalance = (c.amountOwed||0) - (c.amountPaid||0); }
+          if (!found.has(c.playerId)) found.set(c.playerId, {id:c.playerId, name:c.name});
+          found.get(c.playerId).name = c.name;
         });
       });
     });
-    return [...found.values()];
+    return [...found.values()].map(rec=>({...rec, potKeys:allPotKeysForPlayer(weekHistory,rec.id)}));
   })();
   const restorePlayer = (rec) => {
-    const balance={}, paid={};
-    Object.entries(rec.byPot).forEach(([key,bp])=>{ balance[key]=bp.lastBalance; paid[key]=bp.paidTotal; });
-    upd(s=>({players:[...s.players,{id:rec.id,name:rec.name,average:null,colorIdx:s.players.length%COLORS.length,isRegular:true,stats:{},balance,paid}]}));
+    upd(s=>({players:[...s.players,{id:rec.id,name:rec.name,average:null,colorIdx:s.players.length%COLORS.length,isRegular:true,stats:{},balance:{},paid:{}}]}));
   };
 
   // ── Roster ────────────────────────────────────────────────────────────────
@@ -1080,7 +1117,11 @@ function App() {
       const abs=new Set(s.session.absentIds);
       let dr;
       try { dr=analyzeDots(s.players,s.session); } catch(e) { console.error('closeWeek analyzeDots error:', e); window.alert("Couldn't close the week — something went wrong computing dots. Your entries are still saved; please try again or reload."); return s; }
-      const pBal=(p,key)=>((p.balance||{})[key]||0);
+      // Carry-in is always recomputed from the ledger (weekHistory so far), never
+      // read from the cached p.balance snapshot -- that cache can go stale the
+      // moment a payment is logged retroactively against an older week (see
+      // currentBalance's comment above).
+      const pBal=(p,key)=>currentBalance(s.weekHistory,p.id,key);
       const paidSoFar=pid=>(s.session.payments||{})[pid]||0;
       const mkGroup=(pList,potKey)=>{
         const contribs=pList.map(p=>{
@@ -1143,7 +1184,8 @@ function App() {
     const dots=Math.max(0,r.dots);
     const dotsOwed=owedFor(dots,r.dollarDiscount||0);
     // One pot only: this card is only ever shown for present players.
-    const carryIn=(p.balance||{})[MAIN_KEY]||0;
+    // Recomputed from the ledger, not the cached p.balance (see currentBalance).
+    const carryIn=currentBalance(weekHistory,p.id,MAIN_KEY);
     const amountOwed=Math.max(0,dotsOwed+carryIn);
     const amountPaid=(session.payments||{})[p.id]||0;
     return{playerId:p.id,name:p.name,dots,dotsOwed,carryIn,amountOwed,amountPaid};
@@ -1210,7 +1252,7 @@ function App() {
             <div style={{fontSize:12,color:"#ccc",marginBottom:10}}>These were removed from the lineup (✕) but still have week history. Restore reconnects them to their past weeks and running balance — you'll just need to re-set their average.</div>
             <div className="flex gap-8 wrap">
               {removedPlayers.map(rec=>{
-                const owed=Object.values(rec.byPot).reduce((t,bp)=>t+Math.max(0,bp.lastBalance),0);
+                const owed=rec.potKeys.reduce((t,k)=>t+Math.max(0,currentBalance(weekHistory,rec.id,k)),0);
                 return (
                   <button key={rec.id} onClick={()=>restorePlayer(rec)} style={{display:"flex",flexDirection:"column",alignItems:"flex-start",gap:2,padding:"8px 14px",borderRadius:10,background:"rgba(255,107,53,0.1)",border:"1px solid rgba(255,107,53,0.35)",color:"#FF6B35"}}>
                     <span style={{fontWeight:700,fontSize:13}}>↩️ Restore {rec.name}</span>
@@ -1573,8 +1615,11 @@ function App() {
             <div className="section-label" style={{color:"#FF6B35"}}>Current Balances</div>
             <div className="section-sub">From weeks already closed — this week's live totals are above.</div>
             {players.map(p=>{
-              const keys=Object.keys(p.balance||{});
-              const hasAny=keys.some(k=>Math.abs((p.balance||{})[k]||0)>0.005);
+              // Balances/paid are always recomputed from weekHistory (see currentBalance),
+              // never read from the cached p.balance/p.paid -- that cache can go stale
+              // once a payment is logged retroactively against an older week.
+              const keys=allPotKeysForPlayer(weekHistory,p.id);
+              const hasAny=keys.some(k=>Math.abs(currentBalance(weekHistory,p.id,k))>0.005);
               const c=COLORS[p.colorIdx];
               return(
                 <div key={p.id} className="balance-row" style={{background:hasAny?"rgba(255,107,53,0.06)":"rgba(6,214,160,0.06)",border:`1px solid ${hasAny?"rgba(255,107,53,0.2)":"rgba(6,214,160,0.2)"}`}}>
@@ -1583,13 +1628,13 @@ function App() {
                     <div className="flex-1">
                       <div style={{fontWeight:700,fontSize:14}}>{p.name}</div>
                       <div className="mono" style={{fontSize:10,color:"#444"}}>
-                        {Object.entries(p.paid||{}).map(([k,v])=>(k===MAIN_KEY?"main":"side")+" $"+v.toFixed(2)).join(" · ")||"nothing paid yet"}
+                        {keys.map(k=>(k===MAIN_KEY?"main":"side")+" $"+totalPaidByPot(weekHistory,p.id,k).toFixed(2)).join(" · ")||"nothing paid yet"}
                       </div>
                     </div>
                     {!hasAny&&<div style={{fontSize:13,fontWeight:700,color:"#06D6A0"}}>✓ Settled</div>}
                   </div>
                   {hasAny&&keys.map(k=>{
-                    const bal=(p.balance||{})[k]||0;
+                    const bal=currentBalance(weekHistory,p.id,k);
                     if(Math.abs(bal)<0.005)return null;
                     return(
                       <div key={k} className="flex justify-between" style={{fontSize:12,padding:"4px 0",borderTop:"1px solid rgba(255,255,255,0.04)"}}>
