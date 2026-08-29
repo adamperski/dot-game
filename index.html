@@ -999,6 +999,7 @@ function App() {
   const [dateDraft,setDateDraft]=useState(null); // null = use auto default (today)
   const [expandedWeek,setExpandedWeek]=useState(null);
   const [showClose,setShowClose]=useState(false);
+  const [showDebug,setShowDebug]=useState(false);
   const [activeGame,setActiveGame]=useState(0);
   const [statPlayer,setStatPlayer]=useState(null);
   const [statWeek,setStatWeek]=useState(null);
@@ -1365,6 +1366,24 @@ function App() {
         </button>
         {weekHistory.length>0&&(
           <button onClick={resetSeason} style={{width:"100%",padding:"10px",borderRadius:10,background:"transparent",border:"1px solid rgba(255,68,68,0.16)",color:"#ff4444",fontSize:11,fontWeight:700}}>🗑 Reset Entire Season</button>
+        )}
+        {weekHistory.length>0&&(
+          <button onClick={()=>setShowDebug(v=>!v)} style={{width:"100%",padding:"8px",borderRadius:10,background:"transparent",border:"1px solid #2a2a3e",color:"#555",fontSize:10,fontWeight:700,marginTop:8}}>🔍 {showDebug?"Hide":"Show"} Raw Ledger (debug)</button>
+        )}
+        {showDebug&&(
+          <div className="card" style={{marginTop:8}}>
+            <div className="section-label mb-8" style={{color:"#4ECDC4"}}>Raw Ledger</div>
+            <div className="section-sub">One line per player per closed week -- exactly what's stored, for troubleshooting a balance that looks wrong.</div>
+            <pre style={{fontSize:10,color:"#aaa",whiteSpace:"pre-wrap",background:"#080814",padding:10,borderRadius:8,overflowX:"auto"}}>
+{weekHistory.map(wk=>wk.groups.map(g=>g.contributions.map(c=>
+  "wk"+wk.weekNum+" ["+g.potKey+"] "+c.name+" (id "+c.playerId+"): "+c.dots+" dots, dotsOwed=$"+(c.dotsOwed||0).toFixed(2)+", amountPaid=$"+(c.amountPaid||0).toFixed(2)
+).join("\n")).join("\n")).join("\n")}
+            </pre>
+            <div className="section-sub" style={{marginTop:8}}>Current roster player ids:</div>
+            <pre style={{fontSize:10,color:"#aaa",whiteSpace:"pre-wrap",background:"#080814",padding:10,borderRadius:8,overflowX:"auto"}}>
+{players.map(p=>p.name+": id "+p.id).join("\n")}
+            </pre>
+          </div>
         )}
       </div>
     </div>
