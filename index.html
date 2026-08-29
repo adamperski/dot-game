@@ -1010,6 +1010,22 @@ function App() {
   const addSub=()=>{ if(!subName.trim())return; const idx=players.length; upd(s=>({players:[...s.players,{id:Date.now(),name:subName.trim(),average:subAvg?parseInt(subAvg):null,colorIdx:idx%COLORS.length,isRegular:false,stats:{},balance:{},paid:{}}]})); setSubName("");setSubAvg(""); };
   const addRegular=()=>{ if(!newRegName.trim())return; const idx=players.length; upd(s=>({players:[...s.players,{id:Date.now(),name:newRegName.trim(),average:newRegAvg?parseInt(newRegAvg):null,colorIdx:idx%COLORS.length,isRegular:true,stats:{},balance:{},paid:{}}]})); setNewRegName("");setNewRegAvg(""); };
   const removePlayer=(id,isSub)=>{ if(!window.confirm("Remove "+(isSub?"sub":"player")+" from lineup? History stays."))return; upd(s=>({players:s.players.filter(p=>p.id!==id)})); };
+  // Reorders within the same group (regulars vs subs) -- this is also the
+  // bowling order used for hung/team-streak dot logic, so it should match
+  // the real order they bowl in. Never touches id/name/history.
+  const movePlayer=(id,dir)=>{
+    upd(s=>{
+      const arr=[...s.players];
+      const i=arr.findIndex(p=>p.id===id);
+      if(i<0)return s;
+      const group=arr[i].isRegular;
+      let j=i+dir;
+      while(j>=0&&j<arr.length&&arr[j].isRegular!==group)j+=dir;
+      if(j<0||j>=arr.length)return s;
+      [arr[i],arr[j]]=[arr[j],arr[i]];
+      return{players:arr};
+    });
+  };
 
   // ── Session ───────────────────────────────────────────────────────────────
   const startSession=()=>{
@@ -1136,12 +1152,16 @@ function App() {
   const resetSeason=()=>{ if(!window.confirm("Reset entire season?"))return; setState({...initState(),players:players.map(p=>({...p,stats:{},balance:{},paid:{}}))}); };
 
   // ── Roster Row ────────────────────────────────────────────────────────────
-  const RosterRow=({p,index,isSub})=>{
+  const RosterRow=({p,index,isSub,isFirst,isLast})=>{
     const c=COLORS[p.colorIdx];
     const editingAvgNow=editAvg.hasOwnProperty(p.id);
     const editingNameNow=editName.hasOwnProperty(p.id);
     return(
       <div className="roster-row" style={{background:isSub?"rgba(247,37,133,0.06)":c.bg+"0a",border:`1px solid ${isSub?"rgba(247,37,133,0.2)":c.bg+"25"}`}}>
+        <div className="flex" style={{flexDirection:"column",gap:2,flexShrink:0}}>
+          <button onClick={()=>movePlayer(p.id,-1)} disabled={isFirst} title="Move up (bowling order)" style={{padding:"1px 5px",borderRadius:5,background:"transparent",border:"1px solid #2a2a3e",color:isFirst?"#2a2a3e":"#888",fontSize:10,lineHeight:1.4,cursor:isFirst?"default":"pointer"}}>▲</button>
+          <button onClick={()=>movePlayer(p.id,1)} disabled={isLast} title="Move down (bowling order)" style={{padding:"1px 5px",borderRadius:5,background:"transparent",border:"1px solid #2a2a3e",color:isLast?"#2a2a3e":"#888",fontSize:10,lineHeight:1.4,cursor:isLast?"default":"pointer"}}>▼</button>
+        </div>
         <div className="avatar" style={{width:isSub?32:34,height:isSub?32:34,background:c.bg,color:c.text,fontSize:isSub?14:15,flexShrink:0}}>{isSub?p.name.charAt(0):index+1}</div>
         <div className="flex-1">
           {editingNameNow?(
@@ -1219,8 +1239,8 @@ function App() {
 
         <div className="card">
           <div className="section-label" style={{color:"#4ECDC4"}}>Regular Lineup</div>
-          <div className="section-sub">Tap ✏️ to edit name or average. Tap ✕ to remove.</div>
-          {players.filter(p=>p.isRegular).map((p,i)=><RosterRow key={p.id} p={p} index={i} isSub={false}/>)}
+          <div className="section-sub">Tap ✏️ to edit name or average. Tap ▲▼ to reorder bowling order. Tap ✕ to remove.</div>
+          {players.filter(p=>p.isRegular).map((p,i,arr)=><RosterRow key={p.id} p={p} index={i} isSub={false} isFirst={i===0} isLast={i===arr.length-1}/>)}
           <div className="flex gap-8 mt-8">
             <input className="inp flex-1" value={newRegName} onChange={e=>setNewRegName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addRegular()} placeholder="Add player name"/>
             <input className="inp" type="number" value={newRegAvg} onChange={e=>setNewRegAvg(e.target.value)} style={{width:70}} placeholder="Avg"/>
@@ -1231,7 +1251,7 @@ function App() {
         <div className="card">
           <div className="section-label" style={{color:"#F72585"}}>Subs Tonight</div>
           <div className="section-sub">Add a substitute for this session.</div>
-          {players.filter(p=>!p.isRegular).map(p=><RosterRow key={p.id} p={p} index={0} isSub={true}/>)}
+          {players.filter(p=>!p.isRegular).map((p,i,arr)=><RosterRow key={p.id} p={p} index={0} isSub={true} isFirst={i===0} isLast={i===arr.length-1}/>)}
           <div className="flex gap-8">
             <input className="inp flex-1" value={subName} onChange={e=>setSubName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addSub()} placeholder="Sub name"/>
             <input className="inp" type="number" value={subAvg} onChange={e=>setSubAvg(e.target.value)} style={{width:70}} placeholder="Avg"/>
