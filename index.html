@@ -1222,6 +1222,51 @@ function App() {
     });
   };
 
+  // For a closed week, check whether a player's series (their own stored
+  // game scores vs their CURRENT average) should have triggered the 100+
+  // under/over-average rule -- and whether that already shows up in what
+  // was actually charged. A rule that's fixed/added after a week already
+  // closed never gets replayed against that week automatically (closeWeek
+  // only ever runs once, at close time) -- this lets a specific missed
+  // case be corrected deliberately, without touching anything else in
+  // that week (hung, streaks, opens, other players, etc. all stay as-is).
+  const checkSeriesRule=(wk,p)=>{
+    if(!p.average)return null;
+    const gs=(wk.gameScores||{})[p.id]||{};
+    const entries=Object.values(gs).map(v=>parseInt(v)).filter(v=>!isNaN(v));
+    if(entries.length===0)return null;
+    const seriesTotal=entries.reduce((t,v)=>t+v,0);
+    const expected=p.average*entries.length;
+    const dr=(wk.dotResults||{})[p.id];
+    const hasOverEvent=dr&&(dr.events||[]).some(ev=>/over average for the series/.test(ev.label||""));
+    const hasUnderEvent=dr&&(dr.events||[]).some(ev=>/under average for the series/.test(ev.label||""));
+    const over=seriesTotal-expected, under=expected-seriesTotal;
+    if(over>=100&&!hasOverEvent)return{kind:"over",seriesTotal,expected};
+    if(under>=100&&!hasUnderEvent)return{kind:"under",seriesTotal,expected};
+    return null;
+  };
+  const applySeriesFix=(wkNum,pid,kind,seriesTotal,expected)=>{
+    upd(s=>{
+      const newHistory=s.weekHistory.map(wk=>{
+        if(wk.weekNum!==wkNum)return wk;
+        const oldDr=(wk.dotResults||{})[pid]||{dots:0,dollarDiscount:0,events:[],byGame:[],manualDots:0};
+        const label=kind==="over"
+          ?"100+ over average for the series ("+seriesTotal+" vs "+expected+") — $10 off!"
+          :"100+ under average for the series ("+seriesTotal+" vs "+expected+")";
+        const icon=kind==="over"?"🌟":"🤦";
+        const newDots=kind==="under"?oldDr.dots+20:oldDr.dots;
+        const newDiscount=kind==="over"?(oldDr.dollarDiscount||0)+10:(oldDr.dollarDiscount||0);
+        const newDr={...oldDr,dots:newDots,dollarDiscount:newDiscount,events:[...(oldDr.events||[]),{label,icon,dots:kind==="under"?20:0,dollars:kind==="over"?10:undefined}]};
+        const newGroups=wk.groups.map(g=>{
+          if(!g.contributions.some(c=>c.playerId===pid))return g;
+          return{...g,contributions:g.contributions.map(c=>c.playerId===pid?{...c,dots:newDots,dotsOwed:owedFor(newDots,newDiscount)}:c)};
+        });
+        return{...wk,dotResults:{...(wk.dotResults||{}),[pid]:newDr},groups:newGroups};
+      });
+      return{weekHistory:newHistory};
+    });
+  };
+
   // Log a payment against the CURRENT (still-open) week -- doesn't require closing.
   // Carried into weekHistory automatically once the week is eventually closed.
   const payNow=(pid,amount)=>{
@@ -1432,9 +1477,11 @@ function App() {
             {weekHistory.map(wk=>wk.groups.map(g=>g.contributions.map(c=>{
               const current=players.find(p=>p.id===c.playerId);
               const mismatched=!current||current.name!==c.name;
+              const seriesIssue=current?checkSeriesRule(wk,current):null;
+              const flagged=mismatched||seriesIssue;
               return(
-                <div key={wk.weekNum+"-"+g.potKey+"-"+c.playerId} style={{padding:"8px 10px",marginBottom:6,borderRadius:8,background:mismatched?"rgba(255,68,68,0.07)":"#080814",border:mismatched?"1px solid rgba(255,68,68,0.3)":"1px solid #1a1a2e"}}>
-                  <div style={{fontSize:11,color:"#ccc",marginBottom:mismatched?6:0}}>
+                <div key={wk.weekNum+"-"+g.potKey+"-"+c.playerId} style={{padding:"8px 10px",marginBottom:6,borderRadius:8,background:flagged?"rgba(255,68,68,0.07)":"#080814",border:flagged?"1px solid rgba(255,68,68,0.3)":"1px solid #1a1a2e"}}>
+                  <div style={{fontSize:11,color:"#ccc",marginBottom:flagged?6:0}}>
                     Wk{wk.weekNum} [{g.potKey}] <b>{c.name}</b> (id {c.playerId}): {c.dots} dots, owed ${(c.dotsOwed||0).toFixed(2)}, paid ${(c.amountPaid||0).toFixed(2)}
                   </div>
                   {mismatched&&(
@@ -1447,6 +1494,17 @@ function App() {
                             style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,background:"rgba(78,205,196,0.1)",border:"1px solid rgba(78,205,196,0.35)",color:"#4ECDC4"}}>{p.name}</button>
                         ))}
                       </div>
+                    </>
+                  )}
+                  {!mismatched&&seriesIssue&&(
+                    <>
+                      <div style={{fontSize:10,color:"#ff4444",marginBottom:6}}>
+                        ⚠ Series was {seriesIssue.seriesTotal} vs expected {seriesIssue.expected} ({seriesIssue.kind==="over"?"+":"-"}{Math.abs(seriesIssue.seriesTotal-seriesIssue.expected)}) -- the 100+ {seriesIssue.kind} average rule doesn't show as applied for this week.
+                      </div>
+                      <button onClick={()=>{ const msg=seriesIssue.kind==="over"?"Apply the 100+ over average discount: -$10.00 (new total $"+owedFor(c.dots,10).toFixed(2)+")?":"Apply the 100+ under average penalty: +20 dots ($10.00, new total $"+owedFor(c.dots+20,0).toFixed(2)+")?"; if(window.confirm(msg))applySeriesFix(wk.weekNum,c.playerId,seriesIssue.kind,seriesIssue.seriesTotal,seriesIssue.expected); }}
+                        style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,background:"rgba(78,205,196,0.1)",border:"1px solid rgba(78,205,196,0.35)",color:"#4ECDC4"}}>
+                        Apply {seriesIssue.kind==="over"?"🌟 -$10 discount":"🤦 +20 dots"}
+                      </button>
                     </>
                   )}
                 </div>
