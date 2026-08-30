@@ -1027,7 +1027,12 @@ function App() {
   const upd=useCallback(fn=>setState(s=>({...s,...fn(s)})),[]);
 
   const allKeys=allPotKeys(weekHistory);
-  const mainTotal=potTotal(weekHistory,MAIN_KEY);
+  // Cash actually collected so far -- closed weeks' payments plus anything
+  // already paid live this week before it's closed. This is the number that
+  // should match what's sitting in the bank, not just what's been formally
+  // tallied at a week's close.
+  const liveSessionPaid=session?Object.values(session.payments||{}).reduce((t,v)=>t+v,0):0;
+  const mainTotal=potTotal(weekHistory,MAIN_KEY)+liveSessionPaid;
   const sideTotals=allKeys.filter(k=>k!==MAIN_KEY).map(k=>({key:k,total:potTotal(weekHistory,k)}));
   const autoWeekNum=weekHistory.length>0?weekHistory[weekHistory.length-1].weekNum+1:1;
   const effectiveWeekNum=weekNumDraft!==null&&weekNumDraft!==""?parseInt(weekNumDraft):autoWeekNum;
@@ -1448,6 +1453,7 @@ function App() {
               <div style={{flex:1,minWidth:100,padding:"10px 14px",background:"rgba(255,230,109,0.05)",border:"1px solid rgba(255,230,109,0.15)",borderRadius:10,textAlign:"center"}}>
                 <div style={{fontSize:24,fontWeight:700,color:"#FFE66D"}}>${mainTotal.toFixed(2)}</div>
                 <div style={{fontSize:10,color:"#666"}}>Main Pot</div>
+                <div style={{fontSize:9,color:"#555",marginTop:2}}>cash collected — deposit this</div>
               </div>
               {sideTotals.map(({key,total})=>(
                 <div key={key} style={{flex:1,minWidth:100,padding:"10px 14px",background:"rgba(199,125,255,0.05)",border:"1px solid rgba(199,125,255,0.15)",borderRadius:10,textAlign:"center"}}>
@@ -1752,7 +1758,8 @@ function App() {
             <div style={{flex:1,background:"linear-gradient(135deg,#1a1208,#181400)",border:"1px solid rgba(255,230,109,0.15)",borderRadius:14,padding:18,textAlign:"center"}}>
               <div style={{fontSize:10,fontWeight:700,color:"#666",letterSpacing:3,textTransform:"uppercase",marginBottom:4}}>Main Pot</div>
               <div style={{fontSize:38,fontWeight:700,color:"#FFE66D",lineHeight:1}}>${mainTotal.toFixed(2)}</div>
-              {players.length>0&&mainTotal>0&&<div style={{fontSize:11,color:"#888",marginTop:6}}>${(mainTotal/Math.max(1,presentPlayers.length)).toFixed(2)} ea</div>}
+              <div style={{fontSize:10,color:"#666",marginTop:6}}>💵 cash collected so far — deposit this</div>
+              {players.length>0&&mainTotal>0&&<div style={{fontSize:11,color:"#888",marginTop:2}}>${(mainTotal/Math.max(1,presentPlayers.length)).toFixed(2)} ea</div>}
             </div>
             {sideTotals.map(({key,total})=>(
               <div key={key} style={{flex:1,background:"linear-gradient(135deg,#14082a,#120818)",border:"1px solid rgba(199,125,255,0.15)",borderRadius:14,padding:18,textAlign:"center"}}>
