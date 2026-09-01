@@ -419,14 +419,23 @@ function analyzeDots(players, session) {
         // Hung = only this player didn't strike, everyone else in group did.
         // Anything other than a strike counts -- spare, open, split, doesn't
         // matter what it was, only that everyone else struck and this player didn't.
+        // With fewer bowlers present, "everyone else struck" needs fewer
+        // simultaneous strikes to happen and gets dramatically easier to
+        // trigger -- so the cost scales down with group size: full escalating
+        // 2/3/4 dots at 5 present, flat 1 dot at 4 present, and it's switched
+        // off entirely (0 dots) at 3 or fewer, where it'd otherwise fire off
+        // a single other person's strike.
         if (!isStrike(o)) {
           const groupStruck = grp.filter(id=>id!==p.id).every(id=>isStrike(frameOutcome(id, fi)));
           if (groupStruck && grp.length > 1) {
             // This player is hung this frame
             hangStreak++;
-            if (hangStreak===1)      dot(p.id,2,"Hung (1 frame)","🪝",gi);
-            else if (hangStreak===2) dot(p.id,3,"Hung 2 in a row","🪝🪝",gi);
-            else                     dot(p.id,4,"Hung "+hangStreak+" in a row","🪝🪝🪝",gi);
+            const hangDots = grp.length>=5 ? (hangStreak===1?2:hangStreak===2?3:4) : grp.length===4 ? 1 : 0;
+            if (hangDots>0) {
+              const label = hangStreak===1?"Hung (1 frame)":"Hung "+hangStreak+" in a row";
+              const icon = hangStreak===1?"🪝":hangStreak===2?"🪝🪝":"🪝🪝🪝";
+              dot(p.id,hangDots,label,icon,gi);
+            }
           } else {
             hangStreak=0;
           }
@@ -1983,9 +1992,9 @@ function App() {
               {icon:"🎳",label:"Split Leave (missed)",desc:"Left a split and didn't convert",val:"+1 dot"},
               {icon:"🚩",label:"First Team Open",desc:"Very first open frame of the game by anyone on the team",val:"+1 dot"},
               {icon:"💀",label:"Open 10th Frame",desc:"Extra penalty for opening the 10th",val:"+2 dots"},
-              {icon:"🪝",label:"Hung",desc:"Only person in group not to strike in a frame (not spares)",val:"+2 dots"},
-              {icon:"🪝🪝",label:"Hung 2 in a row",desc:"Consecutive frames where same person is hung",val:"+3 dots"},
-              {icon:"🪝🪝🪝",label:"Hung 3+ in a row",desc:"Three+ consecutive hung frames",val:"+4 dots"},
+              {icon:"🪝",label:"Hung",desc:"Only person in group not to strike in a frame (not spares) — 5 present: full price. 4 present: flat 1 dot, no escalation. 3 or fewer: off (0 dots)",val:"+2 dots"},
+              {icon:"🪝🪝",label:"Hung 2 in a row",desc:"Consecutive frames where same person is hung (5 present only)",val:"+3 dots"},
+              {icon:"🪝🪝🪝",label:"Hung 3+ in a row",desc:"Three+ consecutive hung frames (5 present only)",val:"+4 dots"},
               {icon:"📉",label:"Miss Average",desc:"Final game score below your average",val:"+1 dot"},
               {icon:"🕳️",label:"Gutter Ball (1st throw)",desc:"Gutter on first ball of a frame",val:"+2 dots"},
               {icon:"⏭️",label:"Out of Turn",desc:"Bowled when it wasn't your turn",val:"+2 dots"},
