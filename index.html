@@ -107,6 +107,12 @@ const { useState, useEffect, useCallback } = React;
 const DOT_VALUE = 0.50;
 const STORAGE_KEY = "bowling_dot_v10";
 const MAIN_KEY = "main";
+const MANUAL_EVENTS = [
+  {label:"Out of Turn",icon:"⏭️",dots:2},
+  {label:"Wrong Lane",icon:"🔀",dots:2},
+  {label:"Gutter Ball (1st throw)",icon:"🕳️",dots:2},
+];
+const isManualEvent = ev => ev&&ev.game==null&&(ev.dots||0)>0&&MANUAL_EVENTS.some(m=>m.label===ev.label);
 
 const COLORS = [
   {bg:"#FF6B35",text:"#fff"},
@@ -753,7 +759,7 @@ function WeekScoresheets({wk, players}) {
 }
 
 // ─── Week History & Payments (shared by Setup screen and the Pot tab) ─────────
-function WeekHistoryCard({weekHistory, players, expandedWeek, setExpandedWeek, recPay}) {
+function WeekHistoryCard({weekHistory, players, expandedWeek, setExpandedWeek, recPay, undoRecPay, removeManualFromWeek, addManualToWeek}) {
   if (weekHistory.length === 0) return null;
   return (
     <div className="card">
@@ -788,15 +794,33 @@ function WeekHistoryCard({weekHistory, players, expandedWeek, setExpandedWeek, r
                       const byGame=(dr&&dr.byGame)||[];
                       const manual=(dr&&dr.manualDots)||0;
                       const hasBreakdown=byGame.some(d=>d>0)||manual>0;
+                      const manualEvents=dr?dr.events.map((ev,i)=>({ev,i})).filter(({ev})=>isManualEvent(ev)):[];
                       return(
                         <div key={c.playerId} className="mb-8">
-                          <PayRow c={c} players={players} onPay={amt=>recPay(wk.weekNum,g.potKey,c.playerId,amt)}/>
+                          <PayRow c={c} players={players} onPay={amt=>recPay(wk.weekNum,g.potKey,c.playerId,amt)} onUndoPay={undoRecPay?()=>undoRecPay(wk.weekNum,g.potKey,c.playerId):null}/>
                           {hasBreakdown&&(
                             <div style={{display:"flex",gap:6,flexWrap:"wrap",padding:"4px 4px 0"}}>
                               {byGame.map((d,gi2)=>d>0&&(
                                 <span key={gi2} style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:6,background:"#080814",color:"#888"}}>Game {gi2+1}: {d} dot{d===1?"":"s"}</span>
                               ))}
                               {manual>0&&<span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:6,background:"#080814",color:"#888"}}>Manual: {manual} dot{manual===1?"":"s"}</span>}
+                            </div>
+                          )}
+                          {removeManualFromWeek&&addManualToWeek&&(
+                            <div style={{padding:"6px 4px 0"}}>
+                              {manualEvents.map(({ev,i})=>(
+                                <div key={i} className="flex justify-between items-center" style={{padding:"5px 8px",marginTop:4,borderRadius:6,background:"#080814",border:"1px solid #1a1a2e"}}>
+                                  <span style={{fontSize:10,color:"#999"}}>{ev.icon} {ev.label} (+{ev.dots})</span>
+                                  <button onClick={()=>{ if(window.confirm("Remove this "+ev.label+" event for "+c.name+" in Week "+wk.weekNum+"?"))removeManualFromWeek(wk.weekNum,c.playerId,i); }}
+                                    style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:5,background:"rgba(255,68,68,0.1)",border:"1px solid rgba(255,68,68,0.3)",color:"#ff6b6b"}}>✕ Undo</button>
+                                </div>
+                              ))}
+                              <div className="flex gap-4 wrap" style={{marginTop:4}}>
+                                {MANUAL_EVENTS.map(ev=>(
+                                  <button key={ev.label} onClick={()=>{ if(window.confirm("Add "+ev.label+" (+"+ev.dots+" dots) for "+c.name+" in Week "+wk.weekNum+"?"))addManualToWeek(wk.weekNum,c.playerId,ev.dots,ev.label,ev.icon); }}
+                                    style={{fontSize:9,fontWeight:700,padding:"3px 8px",borderRadius:5,background:"rgba(78,205,196,0.08)",border:"1px solid rgba(78,205,196,0.25)",color:"#4ECDC4"}}>+ {ev.icon} {ev.label}</button>
+                                ))}
+                              </div>
                             </div>
                           )}
                         </div>
@@ -833,7 +857,7 @@ function StatBar({label,value,max,color}) {
 }
 
 // ─── Pay Row ──────────────────────────────────────────────────────────────────
-function PayRow({c,players,onPay}) {
+function PayRow({c,players,onPay,onUndoPay}) {
   const [inp,setInp]=useState("");
   const remaining=Math.max(0,(c.amountOwed||0)-(c.amountPaid||0));
   const settled=remaining<0.005;
@@ -867,12 +891,18 @@ function PayRow({c,players,onPay}) {
           <button className="pay-log" onClick={()=>{onPay(parseFloat(inp));setInp("");}}>LOG</button>
         </div>
       )}
+      {onUndoPay&&(c.amountPaid||0)>0.005&&(
+        <button onClick={()=>{ if(window.confirm("Undo "+c.name+"'s $"+c.amountPaid.toFixed(2)+" payment? This resets it back to $0 paid for this week."))onUndoPay(); }}
+          style={{marginTop:8,fontSize:10,fontWeight:700,padding:"4px 10px",borderRadius:8,background:"transparent",border:"1px solid rgba(255,68,68,0.25)",color:"#ff6b6b"}}>
+          ↩ Undo ${c.amountPaid.toFixed(2)} paid
+        </button>
+      )}
     </div>
   );
 }
 
 // ─── Big Pay Row (large-print, for the End of Night screen) ───────────────────
-function BigPayRow({c,color,onPay}) {
+function BigPayRow({c,color,onPay,onUndoPay}) {
   const [inp,setInp]=useState("");
   const remaining=Math.max(0,(c.amountOwed||0)-(c.amountPaid||0));
   const settled=remaining<0.005;
@@ -904,6 +934,12 @@ function BigPayRow({c,color,onPay}) {
             style={{flex:1,minWidth:90,padding:"12px 14px",borderRadius:10,background:"#080814",border:"1px solid #2a2a44",color:"#fff",fontSize:16,outline:"none"}}/>
           <button onClick={()=>{onPay(parseFloat(inp));setInp("");}} style={{padding:"12px 20px",borderRadius:10,background:"#FFE66D",border:"none",color:"#0a0a14",fontWeight:700,fontSize:15}}>LOG</button>
         </div>
+      )}
+      {onUndoPay&&(c.amountPaid||0)>0.005&&(
+        <button onClick={()=>{ if(window.confirm("Undo "+c.name+"'s $"+c.amountPaid.toFixed(2)+" payment?"))onUndoPay(); }}
+          style={{marginTop:10,fontSize:11,fontWeight:700,padding:"6px 12px",borderRadius:8,background:"transparent",border:"1px solid rgba(255,68,68,0.25)",color:"#ff6b6b"}}>
+          ↩ Undo ${c.amountPaid.toFixed(2)} paid
+        </button>
       )}
     </div>
   );
@@ -1134,6 +1170,7 @@ function App() {
   },[upd]);
 
   const addManual=(pid,dots,label,icon)=>{ upd(s=>({session:{...s.session,manualDots:[...(s.session.manualDots||[]),{pid,dots,label,icon}]}})); };
+  const removeManual=(idx)=>{ upd(s=>{ if(!s.session)return s; const arr=[...(s.session.manualDots||[])]; arr.splice(idx,1); return{session:{...s.session,manualDots:arr}}; }); };
 
   // Compute series total per player for current session
   const seriesTotal=(pid)=>{
@@ -1196,6 +1233,23 @@ function App() {
       const newHistory=s.weekHistory.map(wk=>{ if(wk.weekNum!==wkNum)return wk; const ng=wk.groups.map(g=>{ if(g.potKey!==potKey)return g; const nc=g.contributions.map(c=>c.playerId===pid?{...c,amountPaid:(c.amountPaid||0)+amt}:c); return{...g,contributions:nc,totalPaid:nc.reduce((t,c)=>t+(c.amountPaid||0),0)}; }); return{...wk,groups:ng}; });
       const np=s.players.map(p=>{ if(p.id!==pid)return p; return{...p,balance:{...(p.balance||{}),[potKey]:((p.balance||{})[potKey]||0)-amt},paid:{...(p.paid||{}),[potKey]:((p.paid||{})[potKey]||0)+amt}}; });
       return{weekHistory:newHistory,players:np};
+    });
+  };
+
+  // Undo a payment logged against a CLOSED week -- resets that player's
+  // amountPaid for this potKey back to $0 (e.g. accidentally marked paid).
+  const undoRecPay=(wkNum,potKey,pid)=>{
+    upd(s=>{
+      const newHistory=s.weekHistory.map(wk=>{
+        if(wk.weekNum!==wkNum)return wk;
+        const ng=wk.groups.map(g=>{
+          if(g.potKey!==potKey)return g;
+          const nc=g.contributions.map(c=>c.playerId===pid?{...c,amountPaid:0}:c);
+          return{...g,contributions:nc,totalPaid:nc.reduce((t,c)=>t+(c.amountPaid||0),0)};
+        });
+        return{...wk,groups:ng};
+      });
+      return{weekHistory:newHistory};
     });
   };
 
@@ -1299,6 +1353,105 @@ function App() {
     });
   };
 
+  // Manual events (Out of Turn / Wrong Lane / Gutter Ball) on a CLOSED week --
+  // add or remove one retroactively, e.g. it was logged against the wrong
+  // person, or forgotten and needs adding after the fact. Manual events are
+  // identifiable in dotResults[pid].events as entries with no game index and
+  // a label matching one of the known manual event types (isManualEvent,
+  // defined at top level so WeekHistoryCard can use it too).
+  const removeManualFromWeek=(wkNum,pid,eventIdx)=>{
+    upd(s=>{
+      const newHistory=s.weekHistory.map(wk=>{
+        if(wk.weekNum!==wkNum)return wk;
+        const oldDr=(wk.dotResults||{})[pid];
+        if(!oldDr)return wk;
+        const ev=oldDr.events[eventIdx];
+        if(!ev)return wk;
+        const removed=ev.dots||0;
+        const newEvents=oldDr.events.filter((_,i)=>i!==eventIdx);
+        const newDots=oldDr.dots-removed;
+        const newManualDots=(oldDr.manualDots||0)-removed;
+        const newDr={...oldDr,dots:newDots,manualDots:newManualDots,events:newEvents};
+        const newGroups=wk.groups.map(g=>{
+          if(!g.contributions.some(c=>c.playerId===pid))return g;
+          return{...g,contributions:g.contributions.map(c=>c.playerId===pid?{...c,dots:newDots,dotsOwed:owedFor(newDots,newDr.dollarDiscount||0)}:c)};
+        });
+        return{...wk,dotResults:{...(wk.dotResults||{}),[pid]:newDr},groups:newGroups};
+      });
+      return{weekHistory:newHistory};
+    });
+  };
+  const addManualToWeek=(wkNum,pid,dots,label,icon)=>{
+    upd(s=>{
+      const newHistory=s.weekHistory.map(wk=>{
+        if(wk.weekNum!==wkNum)return wk;
+        const oldDr=(wk.dotResults||{})[pid]||{dots:0,dollarDiscount:0,events:[],byGame:[],manualDots:0};
+        const newDots=oldDr.dots+dots;
+        const newManualDots=(oldDr.manualDots||0)+dots;
+        const newDr={...oldDr,dots:newDots,manualDots:newManualDots,events:[...(oldDr.events||[]),{label,icon,dots,game:null}]};
+        const newGroups=wk.groups.map(g=>{
+          if(!g.contributions.some(c=>c.playerId===pid))return g;
+          return{...g,contributions:g.contributions.map(c=>c.playerId===pid?{...c,dots:newDots,dotsOwed:owedFor(newDots,newDr.dollarDiscount||0)}:c)};
+        });
+        return{...wk,dotResults:{...(wk.dotResults||{}),[pid]:newDr},groups:newGroups};
+      });
+      return{weekHistory:newHistory};
+    });
+  };
+
+  // Retroactive check: does a closed week's Hung dots match what the CURRENT
+  // group-size-scaled rule would give? A week closed before the scaling fix
+  // shipped (or before a later headcount correction) can be stuck with the
+  // OLD flat-rate dots, the same way the 100+ series rule could be.
+  const hungStreakPos=label=>{
+    if(label==="Hung (1 frame)")return 1;
+    const m=/^Hung (\d+) in a row$/.exec(label||"");
+    return m?parseInt(m[1]):null;
+  };
+  const expectedHungDots=(presentCount,pos)=>presentCount>=5?(pos===1?2:pos===2?3:4):presentCount===4?1:0;
+  const checkHungRule=(wk,pid)=>{
+    const mainGroup=wk.groups.find(g=>g.potKey===MAIN_KEY);
+    if(!mainGroup)return null;
+    const presentCount=mainGroup.playerIds.length;
+    const dr=(wk.dotResults||{})[pid];
+    if(!dr)return null;
+    const flagged=[];
+    (dr.events||[]).forEach((ev,i)=>{
+      const pos=hungStreakPos(ev.label);
+      if(pos==null)return;
+      const expected=expectedHungDots(presentCount,pos);
+      if((ev.dots||0)!==expected)flagged.push({i,label:ev.label,was:ev.dots||0,expected});
+    });
+    return flagged.length>0?{presentCount,flagged}:null;
+  };
+  const applyHungFix=(wkNum,pid)=>{
+    upd(s=>{
+      const newHistory=s.weekHistory.map(wk=>{
+        if(wk.weekNum!==wkNum)return wk;
+        const oldDr=(wk.dotResults||{})[pid];
+        if(!oldDr)return wk;
+        const mainGroup=wk.groups.find(g=>g.potKey===MAIN_KEY);
+        const presentCount=mainGroup?mainGroup.playerIds.length:0;
+        let delta=0;
+        const newEvents=oldDr.events.map(ev=>{
+          const pos=hungStreakPos(ev.label);
+          if(pos==null)return ev;
+          const expected=expectedHungDots(presentCount,pos);
+          delta+=expected-(ev.dots||0);
+          return expected===0?null:{...ev,dots:expected};
+        }).filter(Boolean);
+        const newDots=oldDr.dots+delta;
+        const newDr={...oldDr,dots:newDots,events:newEvents};
+        const newGroups=wk.groups.map(g=>{
+          if(!g.contributions.some(c=>c.playerId===pid))return g;
+          return{...g,contributions:g.contributions.map(c=>c.playerId===pid?{...c,dots:newDots,dotsOwed:owedFor(newDots,newDr.dollarDiscount||0)}:c)};
+        });
+        return{...wk,dotResults:{...(wk.dotResults||{}),[pid]:newDr},groups:newGroups};
+      });
+      return{weekHistory:newHistory};
+    });
+  };
+
   // Log a payment against the CURRENT (still-open) week -- doesn't require closing.
   // Carried into weekHistory automatically once the week is eventually closed.
   const payNow=(pid,amount)=>{
@@ -1307,6 +1460,16 @@ function App() {
       if(!s.session)return s;
       const payments={...(s.session.payments||{})};
       payments[pid]=(payments[pid]||0)+amt;
+      return{session:{...s.session,payments}};
+    });
+  };
+  // Undo a live payment for the current (still-open) week -- e.g. accidentally
+  // marked paid -- resets it back to $0 for that player.
+  const undoPayNow=(pid)=>{
+    upd(s=>{
+      if(!s.session)return s;
+      const payments={...(s.session.payments||{})};
+      delete payments[pid];
       return{session:{...s.session,payments}};
     });
   };
@@ -1477,7 +1640,7 @@ function App() {
           </div>
         )}
 
-        <WeekHistoryCard weekHistory={weekHistory} players={players} expandedWeek={expandedWeek} setExpandedWeek={setExpandedWeek} recPay={recPay}/>
+        <WeekHistoryCard weekHistory={weekHistory} players={players} expandedWeek={expandedWeek} setExpandedWeek={setExpandedWeek} recPay={recPay} undoRecPay={undoRecPay} removeManualFromWeek={removeManualFromWeek} addManualToWeek={addManualToWeek}/>
 
         {missingAvg.length>0&&(
           <div className="card" style={{border:"1px solid rgba(255,68,68,0.3)",background:"rgba(255,68,68,0.05)"}}>
@@ -1511,7 +1674,8 @@ function App() {
               const current=players.find(p=>p.id===c.playerId);
               const mismatched=!current||current.name!==c.name;
               const seriesIssue=current?checkSeriesRule(wk,current):null;
-              const flagged=mismatched||seriesIssue;
+              const hungIssue=checkHungRule(wk,c.playerId);
+              const flagged=mismatched||seriesIssue||hungIssue;
               return(
                 <div key={wk.weekNum+"-"+g.potKey+"-"+c.playerId} style={{padding:"8px 10px",marginBottom:6,borderRadius:8,background:flagged?"rgba(255,68,68,0.07)":"#080814",border:flagged?"1px solid rgba(255,68,68,0.3)":"1px solid #1a1a2e"}}>
                   <div style={{fontSize:11,color:"#ccc",marginBottom:flagged?6:0}}>
@@ -1537,6 +1701,17 @@ function App() {
                       <button onClick={()=>{ const msg=seriesIssue.kind==="over"?"Apply the 100+ over average discount: -$10.00 (new total $"+owedFor(c.dots,10).toFixed(2)+")?":"Apply the 100+ under average penalty: +20 dots ($10.00, new total $"+owedFor(c.dots+20,0).toFixed(2)+")?"; if(window.confirm(msg))applySeriesFix(wk.weekNum,c.playerId,seriesIssue.kind,seriesIssue.seriesTotal,seriesIssue.expected); }}
                         style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,background:"rgba(78,205,196,0.1)",border:"1px solid rgba(78,205,196,0.35)",color:"#4ECDC4"}}>
                         Apply {seriesIssue.kind==="over"?"🌟 -$10 discount":"🤦 +20 dots"}
+                      </button>
+                    </>
+                  )}
+                  {!mismatched&&hungIssue&&(
+                    <>
+                      <div style={{fontSize:10,color:"#ff4444",marginBottom:6}}>
+                        ⚠ {hungIssue.presentCount} present that week -- {hungIssue.flagged.length} Hung event{hungIssue.flagged.length===1?"":"s"} don't match the current group-size rule: {hungIssue.flagged.map(f=>"\""+f.label+"\" is "+f.was+", should be "+f.expected).join("; ")}.
+                      </div>
+                      <button onClick={()=>{ if(window.confirm("Fix "+hungIssue.flagged.length+" Hung event(s) for "+c.name+" in Week "+wk.weekNum+" to match the "+hungIssue.presentCount+"-present rule?"))applyHungFix(wk.weekNum,c.playerId); }}
+                        style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,background:"rgba(78,205,196,0.1)",border:"1px solid rgba(78,205,196,0.35)",color:"#4ECDC4"}}>
+                        🪝 Fix Hung dots for this week
                       </button>
                     </>
                   )}
@@ -1647,7 +1822,7 @@ function App() {
               {presentPlayers.length>0&&(
                 <div className="mb-16">
                   <div style={{fontSize:14,fontWeight:700,color:"#FFE66D",letterSpacing:3,textTransform:"uppercase",marginBottom:12,textAlign:"center"}}>🎳 The Pot</div>
-                  {presentPlayers.map(p=><BigPayRow key={p.id} c={liveContribution(p)} color={COLORS[p.colorIdx]} onPay={amt=>payNow(p.id,amt)}/>)}
+                  {presentPlayers.map(p=><BigPayRow key={p.id} c={liveContribution(p)} color={COLORS[p.colorIdx]} onPay={amt=>payNow(p.id,amt)} onUndoPay={()=>undoPayNow(p.id)}/>)}
                 </div>
               )}
               {absentPlayers.length>0&&(
@@ -1745,11 +1920,7 @@ function App() {
 
           <div className="card">
             <div className="section-label mb-12" style={{color:"#888"}}>⚡ Manual Events</div>
-            {[
-              {label:"Out of Turn",icon:"⏭️",dots:2},
-              {label:"Wrong Lane",icon:"🔀",dots:2},
-              {label:"Gutter Ball (1st throw)",icon:"🕳️",dots:2},
-            ].map(ev=>(
+            {MANUAL_EVENTS.map(ev=>(
               <div key={ev.label} className="mb-12">
                 <div style={{fontSize:12,color:"#666",marginBottom:6}}>{ev.icon} {ev.label} (+{ev.dots} dots)</div>
                 <div className="flex gap-6 wrap">
@@ -1758,6 +1929,22 @@ function App() {
               </div>
             ))}
           </div>
+
+          {(session.manualDots||[]).length>0&&(
+            <div className="card">
+              <div className="section-label mb-12" style={{color:"#888"}}>↩ This Week's Manual Events</div>
+              {session.manualDots.map((md,idx)=>{
+                const p=players.find(pl=>pl.id===md.pid);
+                return(
+                  <div key={idx} className="flex justify-between items-center" style={{padding:"8px 10px",marginBottom:6,borderRadius:8,background:"#080814",border:"1px solid #1a1a2e"}}>
+                    <span style={{fontSize:12,color:"#ccc"}}>{md.icon} {p?p.name:"?"} — {md.label} (+{md.dots})</span>
+                    <button onClick={()=>{ if(window.confirm("Remove this "+md.label+" event for "+(p?p.name:"this player")+"?"))removeManual(idx); }}
+                      style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,background:"rgba(255,68,68,0.1)",border:"1px solid rgba(255,68,68,0.3)",color:"#ff6b6b"}}>✕ Undo</button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </>}
 
         {/* ═══ POT ═══ */}
@@ -1784,7 +1971,7 @@ function App() {
             <div className="section-sub">Wk {session.weekNum} live totals, updates as scores come in. Log payments any time.</div>
             {presentPlayers.length>0&&(
               <div className="mb-14">
-                {presentPlayers.map(p=><PayRow key={p.id} c={liveContribution(p)} players={players} onPay={amt=>payNow(p.id,amt)}/>)}
+                {presentPlayers.map(p=><PayRow key={p.id} c={liveContribution(p)} players={players} onPay={amt=>payNow(p.id,amt)} onUndoPay={()=>undoPayNow(p.id)}/>)}
               </div>
             )}
             {absentPlayers.length>0&&(
@@ -1835,7 +2022,7 @@ function App() {
           </div>
 
           {weekHistory.length>0?(
-            <WeekHistoryCard weekHistory={weekHistory} players={players} expandedWeek={expandedWeek} setExpandedWeek={setExpandedWeek} recPay={recPay}/>
+            <WeekHistoryCard weekHistory={weekHistory} players={players} expandedWeek={expandedWeek} setExpandedWeek={setExpandedWeek} recPay={recPay} undoRecPay={undoRecPay} removeManualFromWeek={removeManualFromWeek} addManualToWeek={addManualToWeek}/>
           ):(
             <div className="empty-state"><div className="empty-icon">💰</div><div className="empty-text">No weeks closed yet</div></div>
           )}
