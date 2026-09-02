@@ -1044,7 +1044,59 @@ function exportToExcel(players, weekHistory) {
   ws4["!cols"] = [{wch:6},{wch:12},{wch:18},{wch:9},{wch:9},{wch:9},{wch:9}];
   XLSX.utils.book_append_sheet(wb, ws4, "Scores");
 
+  // ── Sheet 5: Frame by Frame ────────────────────────────────────────────────
+  // Same symbols as the on-screen scoresheet (X/·/S/S/ etc.) -- one row per
+  // game actually played, columns F1-F10 (10th frame's fill balls joined
+  // with spaces, e.g. "X X /").
+  const frameSym = f => (f&&f.outcome&&frameStyleMap[f.outcome])?frameStyleMap[f.outcome].sym:"";
+  const frame10Sym = f10 => ((f10&&f10.throws)||[]).map(t=>(t&&t.outcome&&frameStyleMap[t.outcome])?frameStyleMap[t.outcome].sym:null).filter(Boolean).join(" ");
+  const frameRows = [["Week","Date","Player","Game","F1","F2","F3","F4","F5","F6","F7","F8","F9","F10","Score"]];
+  weekHistory.forEach(wk=>{
+    if(!wk.playerGames) return;
+    players.forEach(p=>{
+      const games = wk.playerGames[p.id];
+      if(!games) return;
+      games.forEach((frames,gi)=>{
+        if(!frames) return;
+        const hasAny = frames.slice(0,9).some(f=>f&&f.outcome) || (frames[9]&&frames[9].throws&&frames[9].throws.some(t=>t&&t.outcome));
+        if(!hasAny) return;
+        const score = ((wk.gameScores||{})[p.id]||{})[gi] || "";
+        frameRows.push([
+          wk.weekNum, wk.date, p.name, gi+1,
+          frameSym(frames[0]),frameSym(frames[1]),frameSym(frames[2]),frameSym(frames[3]),frameSym(frames[4]),
+          frameSym(frames[5]),frameSym(frames[6]),frameSym(frames[7]),frameSym(frames[8]),
+          frame10Sym(frames[9]),
+          score
+        ]);
+      });
+    });
+  });
+  const ws5 = XLSX.utils.aoa_to_sheet(frameRows);
+  ws5["!cols"] = [{wch:6},{wch:12},{wch:18},{wch:6},...Array(9).fill({wch:5}),{wch:10},{wch:8}];
+  XLSX.utils.book_append_sheet(wb, ws5, "Frame by Frame");
+
   XLSX.writeFile(wb, "DotGame_Season.xlsx");
+}
+
+// ─── Full Backup / Restore (raw state, lossless round-trip) ───────────────────
+// The Excel export is for humans reading numbers; this is for disaster
+// recovery -- an exact copy of everything the app knows (roster, every
+// closed week's dots/scoresheets/payments, the in-progress session if any)
+// that can be loaded right back in if the device/browser is lost or reset.
+function exportBackup(state) {
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const stamp = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = "DotGame_Backup_"+stamp+".json";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function isValidBackup(obj) {
+  return obj && typeof obj==="object" && Array.isArray(obj.players) && Array.isArray(obj.weekHistory);
 }
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
@@ -1489,6 +1541,25 @@ function App() {
 
   const resetSeason=()=>{ if(!window.confirm("Reset entire season?"))return; setState({...initState(),players:players.map(p=>({...p,stats:{},balance:{},paid:{}}))}); };
 
+  // Restore from a full JSON backup (see exportBackup) -- completely replaces
+  // the current roster, every closed week, and any in-progress session with
+  // whatever's in the file. Used to recover after losing/resetting the
+  // device this was running on.
+  const importBackup=(file)=>{
+    if(!file)return;
+    const reader=new FileReader();
+    reader.onload=()=>{
+      let parsed;
+      try{ parsed=JSON.parse(reader.result); }
+      catch(e){ window.alert("That file isn't valid JSON -- couldn't read it as a Dot Game backup."); return; }
+      if(!isValidBackup(parsed)){ window.alert("That file doesn't look like a Dot Game backup (missing players/weekHistory)."); return; }
+      const weeks=parsed.weekHistory.length, rosterSize=parsed.players.length;
+      if(!window.confirm("Restore this backup? It has "+rosterSize+" player(s) and "+weeks+" closed week(s).\n\nThis REPLACES everything currently in the app -- current roster, week history, and any in-progress session will be gone. This cannot be undone."))return;
+      setState(parsed);
+    };
+    reader.readAsText(file);
+  };
+
   // ── Roster Row ────────────────────────────────────────────────────────────
   const RosterRow=({p,index,isSub,isFirst,isLast})=>{
     const c=COLORS[p.colorIdx];
@@ -1639,6 +1710,18 @@ function App() {
             </button>
           </div>
         )}
+
+        <div className="card">
+          <div className="section-label mb-8" style={{color:"#4ECDC4"}}>💾 Backup & Restore</div>
+          <div className="section-sub">A full backup is a lossless copy of everything -- roster, every closed week, frame-by-frame scoresheets, payments. Excel export is for reading the numbers; this is for actually restoring the app if this device is lost or reset. Keep a copy somewhere off this device.</div>
+          <button onClick={()=>exportBackup(state)} style={{width:"100%",padding:"10px",borderRadius:10,background:"linear-gradient(135deg,#4ECDC4,#2eada5)",border:"none",color:"#0a0a14",fontWeight:700,fontSize:13,marginBottom:8}}>
+            ⬇ Download Full Backup (.json)
+          </button>
+          <label htmlFor="restoreFileInput" style={{display:"block",width:"100%",padding:"10px",borderRadius:10,background:"transparent",border:"1px solid rgba(255,107,53,0.3)",color:"#FF6B35",fontWeight:700,fontSize:13,textAlign:"center",cursor:"pointer",boxSizing:"border-box"}}>
+            ⬆ Restore From Backup File
+          </label>
+          <input id="restoreFileInput" type="file" accept="application/json,.json" style={{display:"none"}} onChange={e=>{ importBackup(e.target.files[0]); e.target.value=""; }}/>
+        </div>
 
         <WeekHistoryCard weekHistory={weekHistory} players={players} expandedWeek={expandedWeek} setExpandedWeek={setExpandedWeek} recPay={recPay} undoRecPay={undoRecPay} removeManualFromWeek={removeManualFromWeek} addManualToWeek={addManualToWeek}/>
 
