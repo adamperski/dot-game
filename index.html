@@ -1386,19 +1386,20 @@ function App() {
   const checkSeriesRule=(wk,p)=>{
     if(!p.average)return null;
     const gs=(wk.gameScores||{})[p.id]||{};
-    const entries=Object.values(gs).map(v=>parseInt(v)).filter(v=>!isNaN(v));
+    const entries=Object.entries(gs).map(([gi,v])=>[parseInt(gi),parseInt(v)]).filter(([,v])=>!isNaN(v));
     if(entries.length===0)return null;
-    const seriesTotal=entries.reduce((t,v)=>t+v,0);
+    const seriesTotal=entries.reduce((t,[,v])=>t+v,0);
     const expected=p.average*entries.length;
+    const lastGi=Math.max(...entries.map(([g])=>g));
     const dr=(wk.dotResults||{})[p.id];
     const hasOverEvent=dr&&(dr.events||[]).some(ev=>/over average for the series/.test(ev.label||""));
     const hasUnderEvent=dr&&(dr.events||[]).some(ev=>/under average for the series/.test(ev.label||""));
     const over=seriesTotal-expected, under=expected-seriesTotal;
-    if(over>=100&&!hasOverEvent)return{kind:"over",seriesTotal,expected};
-    if(under>=100&&!hasUnderEvent)return{kind:"under",seriesTotal,expected};
+    if(over>=100&&!hasOverEvent)return{kind:"over",seriesTotal,expected,lastGi};
+    if(under>=100&&!hasUnderEvent)return{kind:"under",seriesTotal,expected,lastGi};
     return null;
   };
-  const applySeriesFix=(wkNum,pid,kind,seriesTotal,expected)=>{
+  const applySeriesFix=(wkNum,pid,kind,seriesTotal,expected,lastGi)=>{
     upd(s=>{
       const newHistory=s.weekHistory.map(wk=>{
         if(wk.weekNum!==wkNum)return wk;
@@ -1409,7 +1410,13 @@ function App() {
         const icon=kind==="over"?"🌟":"🤦";
         const newDots=kind==="under"?oldDr.dots+20:oldDr.dots;
         const newDiscount=kind==="over"?(oldDr.dollarDiscount||0)+10:(oldDr.dollarDiscount||0);
-        const newDr={...oldDr,dots:newDots,dollarDiscount:newDiscount,events:[...(oldDr.events||[]),{label,icon,dots:kind==="under"?20:0,dollars:kind==="over"?10:undefined}]};
+        // "Under" adds a real 20-dot charge tied to the last game of the
+        // series -- has to land in byGame too, or the per-game breakdown
+        // (Game N: X dots) silently stops matching the real total, same bug
+        // class as the Hung fix below.
+        const newByGame=[...(oldDr.byGame||[])];
+        if(kind==="under"&&lastGi!=null)newByGame[lastGi]=(newByGame[lastGi]||0)+20;
+        const newDr={...oldDr,dots:newDots,dollarDiscount:newDiscount,byGame:newByGame,events:[...(oldDr.events||[]),{label,icon,dots:kind==="under"?20:0,dollars:kind==="over"?10:undefined,game:kind==="under"&&lastGi!=null?lastGi+1:null}]};
         const newGroups=wk.groups.map(g=>{
           if(!g.contributions.some(c=>c.playerId===pid))return g;
           return{...g,contributions:g.contributions.map(c=>c.playerId===pid?{...c,dots:newDots,dotsOwed:owedFor(newDots,newDiscount)}:c)};
@@ -1500,15 +1507,23 @@ function App() {
         const mainGroup=wk.groups.find(g=>g.potKey===MAIN_KEY);
         const presentCount=mainGroup?mainGroup.playerIds.length:0;
         let delta=0;
+        const newByGame=[...(oldDr.byGame||[])];
         const newEvents=oldDr.events.map(ev=>{
           const pos=hungStreakPos(ev.label);
           if(pos==null)return ev;
           const expected=expectedHungDots(presentCount,pos);
-          delta+=expected-(ev.dots||0);
+          const evDelta=expected-(ev.dots||0);
+          delta+=evDelta;
+          // Each Hung event is tied to a specific game (ev.game, 1-indexed) --
+          // its dots landed in byGame[gi] when it was first computed, so the
+          // per-game breakdown needs the same delta applied there, or it's
+          // left holding the old, wrong value even after the total/events
+          // are corrected.
+          if(ev.game!=null){ const gi=ev.game-1; newByGame[gi]=(newByGame[gi]||0)+evDelta; }
           return expected===0?null:{...ev,dots:expected};
         }).filter(Boolean);
         const newDots=oldDr.dots+delta;
-        const newDr={...oldDr,dots:newDots,events:newEvents};
+        const newDr={...oldDr,dots:newDots,byGame:newByGame,events:newEvents};
         const newGroups=wk.groups.map(g=>{
           if(!g.contributions.some(c=>c.playerId===pid))return g;
           return{...g,contributions:g.contributions.map(c=>c.playerId===pid?{...c,dots:newDots,dotsOwed:owedFor(newDots,newDr.dollarDiscount||0)}:c)};
@@ -1796,7 +1811,7 @@ function App() {
                       <div style={{fontSize:10,color:"#ff4444",marginBottom:6}}>
                         ⚠ Series was {seriesIssue.seriesTotal} vs expected {seriesIssue.expected} ({seriesIssue.kind==="over"?"+":"-"}{Math.abs(seriesIssue.seriesTotal-seriesIssue.expected)}) -- the 100+ {seriesIssue.kind} average rule doesn't show as applied for this week.
                       </div>
-                      <button onClick={()=>{ const msg=seriesIssue.kind==="over"?"Apply the 100+ over average discount: -$10.00 (new total $"+owedFor(c.dots,10).toFixed(2)+")?":"Apply the 100+ under average penalty: +20 dots ($10.00, new total $"+owedFor(c.dots+20,0).toFixed(2)+")?"; if(window.confirm(msg))applySeriesFix(wk.weekNum,c.playerId,seriesIssue.kind,seriesIssue.seriesTotal,seriesIssue.expected); }}
+                      <button onClick={()=>{ const msg=seriesIssue.kind==="over"?"Apply the 100+ over average discount: -$10.00 (new total $"+owedFor(c.dots,10).toFixed(2)+")?":"Apply the 100+ under average penalty: +20 dots ($10.00, new total $"+owedFor(c.dots+20,0).toFixed(2)+")?"; if(window.confirm(msg))applySeriesFix(wk.weekNum,c.playerId,seriesIssue.kind,seriesIssue.seriesTotal,seriesIssue.expected,seriesIssue.lastGi); }}
                         style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,background:"rgba(78,205,196,0.1)",border:"1px solid rgba(78,205,196,0.35)",color:"#4ECDC4"}}>
                         Apply {seriesIssue.kind==="over"?"🌟 -$10 discount":"🤦 +20 dots"}
                       </button>
