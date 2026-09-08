@@ -1534,6 +1534,38 @@ function App() {
     });
   };
 
+  // General consistency check: does byGame (the per-game chips shown in Week
+  // History) actually match the events list (the itemized breakdown)? These
+  // can drift apart if a corrective tool updates one but not the other --
+  // exactly what happened before applyHungFix/applySeriesFix were fixed to
+  // update both together. events is the source of truth (it's what's shown
+  // and what analyzeDots always derives byGame from), so the fix is just to
+  // recompute byGame from it directly -- catches this drift regardless of
+  // what originally caused it, including a Hung/series fix that was already
+  // applied before this check existed.
+  const recomputeByGame=events=>{
+    const byGame=[];
+    (events||[]).forEach(ev=>{ if(ev.game!=null&&(ev.dots||0)>0){ const gi=ev.game-1; byGame[gi]=(byGame[gi]||0)+ev.dots; } });
+    return byGame;
+  };
+  const checkByGameDrift=(wk,pid)=>{
+    const dr=(wk.dotResults||{})[pid];
+    if(!dr)return null;
+    const expected=recomputeByGame(dr.events);
+    const actual=dr.byGame||[];
+    const len=Math.max(expected.length,actual.length);
+    for(let i=0;i<len;i++){ if((expected[i]||0)!==(actual[i]||0))return{expected,actual}; }
+    return null;
+  };
+  const applyByGameFix=(wkNum,pid)=>{
+    upd(s=>({weekHistory:s.weekHistory.map(wk=>{
+      if(wk.weekNum!==wkNum)return wk;
+      const dr=(wk.dotResults||{})[pid];
+      if(!dr)return wk;
+      return{...wk,dotResults:{...wk.dotResults,[pid]:{...dr,byGame:recomputeByGame(dr.events)}}};
+    })}));
+  };
+
   // Log a payment against the CURRENT (still-open) week -- doesn't require closing.
   // Carried into weekHistory automatically once the week is eventually closed.
   const payNow=(pid,amount)=>{
@@ -1788,7 +1820,8 @@ function App() {
               const mismatched=!current||current.name!==c.name;
               const seriesIssue=current?checkSeriesRule(wk,current):null;
               const hungIssue=checkHungRule(wk,c.playerId);
-              const flagged=mismatched||seriesIssue||hungIssue;
+              const byGameIssue=checkByGameDrift(wk,c.playerId);
+              const flagged=mismatched||seriesIssue||hungIssue||byGameIssue;
               return(
                 <div key={wk.weekNum+"-"+g.potKey+"-"+c.playerId} style={{padding:"8px 10px",marginBottom:6,borderRadius:8,background:flagged?"rgba(255,68,68,0.07)":"#080814",border:flagged?"1px solid rgba(255,68,68,0.3)":"1px solid #1a1a2e"}}>
                   <div style={{fontSize:11,color:"#ccc",marginBottom:flagged?6:0}}>
@@ -1825,6 +1858,17 @@ function App() {
                       <button onClick={()=>{ if(window.confirm("Fix "+hungIssue.flagged.length+" Hung event(s) for "+c.name+" in Week "+wk.weekNum+" to match the "+hungIssue.presentCount+"-present rule?"))applyHungFix(wk.weekNum,c.playerId); }}
                         style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,background:"rgba(78,205,196,0.1)",border:"1px solid rgba(78,205,196,0.35)",color:"#4ECDC4"}}>
                         🪝 Fix Hung dots for this week
+                      </button>
+                    </>
+                  )}
+                  {!mismatched&&byGameIssue&&(
+                    <>
+                      <div style={{fontSize:10,color:"#ff4444",marginBottom:6}}>
+                        ⚠ Per-game chips don't match the event breakdown -- stored as {byGameIssue.actual.map((d,i)=>"G"+(i+1)+":"+(d||0)).join(", ")||"none"}, but the events add up to {byGameIssue.expected.map((d,i)=>"G"+(i+1)+":"+(d||0)).join(", ")||"none"}. Likely a leftover from a fix applied before this check existed.
+                      </div>
+                      <button onClick={()=>{ if(window.confirm("Recompute Week "+wk.weekNum+"'s per-game dot chips for "+c.name+" from the event breakdown (the source of truth)?"))applyByGameFix(wk.weekNum,c.playerId); }}
+                        style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,background:"rgba(78,205,196,0.1)",border:"1px solid rgba(78,205,196,0.35)",color:"#4ECDC4"}}>
+                        🔁 Recompute per-game chips
                       </button>
                     </>
                   )}
