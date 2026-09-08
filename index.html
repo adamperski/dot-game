@@ -770,6 +770,7 @@ function WeekHistoryCard({weekHistory, players, expandedWeek, setExpandedWeek, r
         // earlier week is reflected here immediately, not just going forward.
         const groups=wk.groups.map(g=>liveGroup(weekHistory,wk,g));
         const settled=groups.every(g=>Math.abs(g.totalOwed-(g.totalPaid||0))<0.01);
+        const wkGameCount=wk.playerGames?Math.max(1,...Object.values(wk.playerGames).map(g=>(g||[]).length)):1;
         return(
           <div key={wk.weekNum} className="week-row">
             <button className="week-header" onClick={()=>setExpandedWeek(isOpen?null:wk.weekNum)}>
@@ -804,6 +805,20 @@ function WeekHistoryCard({weekHistory, players, expandedWeek, setExpandedWeek, r
                                 <span key={gi2} style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:6,background:"#080814",color:"#888"}}>Game {gi2+1}: {d} dot{d===1?"":"s"}</span>
                               ))}
                               {manual>0&&<span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:6,background:"#080814",color:"#888"}}>Manual: {manual} dot{manual===1?"":"s"}</span>}
+                            </div>
+                          )}
+                          {dr&&dr.events&&dr.events.length>0&&(
+                            <div className="dot-events" style={{padding:"6px 4px 0",gap:2}}>
+                              {dr.events.map((ev,i)=>(
+                                <div key={i} className="dot-event-row" style={{fontSize:11}}>
+                                  <span style={{fontSize:13}}>{ev.icon}</span>
+                                  {wkGameCount>1&&ev.game&&<span className="mono" style={{fontSize:9,color:"#444",flexShrink:0}}>G{ev.game}</span>}
+                                  <span style={{flex:1}}>{ev.label}</span>
+                                  {ev.dots>0&&<span className="mono" style={{color:"#FF6B35",fontWeight:700}}>+{ev.dots}</span>}
+                                  {ev.dollars&&<span className="mono" style={{color:"#4ECDC4",fontWeight:700}}>-${ev.dollars}</span>}
+                                  {ev.wipe&&<span style={{color:"#FFE66D",fontWeight:700}}>WIPED</span>}
+                                </div>
+                              ))}
                             </div>
                           )}
                           {removeManualFromWeek&&addManualToWeek&&(
