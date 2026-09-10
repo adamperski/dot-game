@@ -807,20 +807,33 @@ function WeekHistoryCard({weekHistory, players, expandedWeek, setExpandedWeek, r
                               {manual>0&&<span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:6,background:"#080814",color:"#888"}}>Manual: {manual} dot{manual===1?"":"s"}</span>}
                             </div>
                           )}
-                          {dr&&dr.events&&dr.events.length>0&&(
-                            <div className="dot-events" style={{padding:"6px 4px 0",gap:2}}>
-                              {dr.events.map((ev,i)=>(
-                                <div key={i} className="dot-event-row" style={{fontSize:11}}>
-                                  <span style={{fontSize:13}}>{ev.icon}</span>
-                                  {wkGameCount>1&&ev.game&&<span className="mono" style={{fontSize:9,color:"#444",flexShrink:0}}>G{ev.game}</span>}
-                                  <span style={{flex:1}}>{ev.label}</span>
-                                  {ev.dots>0&&<span className="mono" style={{color:"#FF6B35",fontWeight:700}}>+{ev.dots}</span>}
-                                  {ev.dollars&&<span className="mono" style={{color:"#4ECDC4",fontWeight:700}}>-${ev.dollars}</span>}
-                                  {ev.wipe&&<span style={{color:"#FFE66D",fontWeight:700}}>WIPED</span>}
-                                </div>
-                              ))}
-                            </div>
-                          )}
+                          {dr&&dr.events&&dr.events.length>0&&(()=>{
+                            // Group the events by game so each game's dots read as
+                            // its own block, with a faint rule between them.
+                            const groups={};
+                            dr.events.forEach(ev=>{ const k=ev.game||0; (groups[k]=groups[k]||[]).push(ev); });
+                            const keys=Object.keys(groups).map(Number).sort((a,b)=>(a===0?999:a)-(b===0?999:b));
+                            return(
+                              <div className="dot-events" style={{padding:"6px 4px 0",gap:0}}>
+                                {keys.map((k,ki)=>(
+                                  <div key={k} style={{borderTop:ki>0?"1px solid rgba(255,255,255,0.08)":"none",paddingTop:ki>0?5:0,marginTop:ki>0?5:0}}>
+                                    {keys.length>1&&(
+                                      <div className="mono" style={{fontSize:8,color:"#555",letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>{k===0?"Manual / Series":"Game "+k}</div>
+                                    )}
+                                    {groups[k].map((ev,i)=>(
+                                      <div key={i} className="dot-event-row" style={{fontSize:11}}>
+                                        <span style={{fontSize:13}}>{ev.icon}</span>
+                                        <span style={{flex:1}}>{ev.label}</span>
+                                        {ev.dots>0&&<span className="mono" style={{color:"#FF6B35",fontWeight:700}}>+{ev.dots}</span>}
+                                        {ev.dollars&&<span className="mono" style={{color:"#4ECDC4",fontWeight:700}}>-${ev.dollars}</span>}
+                                        {ev.wipe&&<span style={{color:"#FFE66D",fontWeight:700}}>WIPED</span>}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
                           {removeManualFromWeek&&addManualToWeek&&(
                             <div style={{padding:"6px 4px 0"}}>
                               {manualEvents.map(({ev,i})=>(
